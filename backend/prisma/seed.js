@@ -1,118 +1,129 @@
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
-const { generateSecret } = require('otplib');
+const argon2 = require('argon2');
+const crypto = require('crypto');
 
 const prisma = new PrismaClient();
 
+function encrypt(text, hexKey = '0000000000000000000000000000000000000000000000000000000000000000') {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(hexKey, 'hex'), iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag().toString('hex');
+    return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+}
+
 async function main() {
-    console.log('Seeding Proctora Database...');
+    console.log('🌱 Seeding Proctora database...');
 
-    const adminPasswordHash = await bcrypt.hash('admin123', 10);
-    const studentPasswordHash = await bcrypt.hash('student123', 10);
+    await prisma.examResponse.deleteMany({});
+    await prisma.proctorAlert.deleteMany({});
+    await prisma.editorTelemetryEvent.deleteMany({});
+    await prisma.focusLog.deleteMany({});
+    await prisma.proctoringEvent.deleteMany({});
+    await prisma.deviceDiagnostic.deleteMany({});
+    await prisma.examSession.deleteMany({});
+    await prisma.accommodation.deleteMany({});
+    await prisma.seatingAssignment.deleteMany({});
+    await prisma.question.deleteMany({});
+    await prisma.exam.deleteMany({});
+    await prisma.session.deleteMany({});
+    await prisma.user.deleteMany({});
 
-    // Create Admin
-    const admin = await prisma.user.upsert({
-        where: { email: 'admin@proctora.edu' },
-        update: {},
-        create: {
+    const adminPasswordHash = await argon2.hash('Admin@12345', { type: argon2.argon2id });
+    const adminUser = await prisma.user.create({
+        data: {
             email: 'admin@proctora.edu',
-            name: 'Prof. Adarsh Bellamane (Admin)',
+            name: 'Dr. Proctora Admin',
             passwordHash: adminPasswordHash,
             role: 'ADMIN',
-            twoFactorSecret: generateSecret(),
+            totpSecret: encrypt('JBSWY3DPEHPK3PXP'),
             twoFactorEnabled: true
         }
     });
 
-    // Create Students
-    const student1 = await prisma.user.upsert({
-        where: { email: 'candidate@proctora.edu' },
-        update: {},
-        create: {
+    const candidatePasswordHash = await argon2.hash('Student@12345', { type: argon2.argon2id });
+    const candidateUser = await prisma.user.create({
+        data: {
             email: 'candidate@proctora.edu',
             name: 'Adarsh Bellamane',
             rollNumber: '241IT004',
-            passwordHash: studentPasswordHash,
-            role: 'STUDENT',
-            twoFactorSecret: generateSecret(),
+            passwordHash: candidatePasswordHash,
+            role: 'CANDIDATE',
+            totpSecret: encrypt('JBSWY3DPEHPK3PXQ'),
             twoFactorEnabled: true
         }
     });
 
-    const student2 = await prisma.user.upsert({
-        where: { email: 'harshith@proctora.edu' },
-        update: {},
-        create: {
-            email: 'harshith@proctora.edu',
-            name: 'Harshith Vellapha',
-            rollNumber: '241IT033',
-            passwordHash: studentPasswordHash,
-            role: 'STUDENT',
-            twoFactorSecret: generateSecret(),
-            twoFactorEnabled: true
-        }
-    });
+    console.log('✅ Created initial users: Admin & Candidate');
 
-    // Create Sample Exam
     const exam = await prisma.exam.create({
         data: {
-            title: 'IT303: Software Engineering & DSA Assessment',
-            description: 'Real-Time Proctoring & Coding Examination 2026',
-            durationMinutes: 45,
+            title: 'CS303: Data Structures & Algorithms End-Semester Examination',
+            description: 'Proctored examination covering Trees, Graphs, Dynamic Programming, and System Design.',
+            durationMinutes: 90,
+            idleTimeoutSec: 300,
             shufflingMode: 'SEATING',
-            createdById: admin.id,
-            questions: {
-                create: [
-                    {
-                        title: 'Time Complexity of Binary Search',
-                        description: 'What is the worst-case time complexity of binary search on a sorted array of N elements?',
-                        type: 'MCQ',
-                        optionsJson: JSON.stringify(['O(1)', 'O(log N)', 'O(N)', 'O(N log N)']),
-                        correctAnswer: 'O(log N)',
-                        points: 2,
-                        orderIndex: 1
-                    },
-                    {
-                        title: 'Reverse Words in a String',
-                        description: 'Write a function in JavaScript/Python to reverse words in a given string sentence.',
-                        type: 'CODING',
-                        starterCode: 'function reverseWords(str) {\n    // Write your code here\n    return "";\n}',
-                        testCasesJson: JSON.stringify([{ input: '"hello world"', output: '"world hello"' }]),
-                        points: 10,
-                        orderIndex: 2
-                    }
-                ]
-            }
+            createdBy: adminUser.id
         }
     });
 
-    // Create Seating Plan
-    await prisma.seatingPlan.createMany({
+    await prisma.question.createMany({
         data: [
-            { examId: exam.id, rollNumber: '241IT004', seatRow: 1, seatCol: 1, seatLabel: 'Lab-A-R1-C1' },
-            { examId: exam.id, rollNumber: '241IT033', seatRow: 1, seatCol: 2, seatLabel: 'Lab-A-R1-C2' }
+            {
+                examId: exam.id,
+                title: 'Time Complexity of QuickSelect',
+                content: 'What is the average-case time complexity of the QuickSelect algorithm for finding the k-th smallest element?',
+                type: 'MCQ',
+                metadata: JSON.stringify({
+                    options: ['O(N^2)', 'O(N log N)', 'O(N)', 'O(log N)'],
+                    correctAnswer: 'O(N)',
+                    points: 2
+                }),
+                orderIndex: 1
+            },
+            {
+                examId: exam.id,
+                title: 'Implement Invert Binary Tree',
+                content: 'Write an efficient function to invert a binary tree in Node.js/Python.',
+                type: 'CODING',
+                metadata: JSON.stringify({
+                    starterCode: 'function invertTree(root) {\n  // Write your code here\n}',
+                    testCases: [{ input: '[4,2,7,1,3,6,9]', expected: '[4,7,2,9,6,3,1]' }],
+                    points: 10
+                }),
+                orderIndex: 2
+            }
         ]
     });
 
-    // Create Accommodation
-    await prisma.accommodation.create({
+    await prisma.seatingAssignment.create({
         data: {
             examId: exam.id,
-            candidateId: student1.id,
-            extraMinutes: 15,
-            notes: 'Approved 15-minute extended time accommodation.'
+            rollNumber: '241IT004',
+            seatRow: 3,
+            seatCol: 4,
+            seatLabel: 'Lab-A-Row-3-Col-4'
         }
     });
 
-    console.log('Seeding completed successfully!');
-    console.log(`Admin User: admin@proctora.edu / admin123`);
-    console.log(`Candidate User: candidate@proctora.edu / student123 (Roll: 241IT004)`);
-    console.log(`Created Exam ID: ${exam.id}`);
+    await prisma.accommodation.create({
+        data: {
+            examId: exam.id,
+            userId: candidateUser.id,
+            extraTimeSec: 900,
+            approvedBy: adminUser.id,
+            notes: 'Approved 15 minutes extra time accommodation'
+        }
+    });
+
+    console.log('✅ Created exam, questions, seating plan, and accommodations.');
+    console.log('🌱 Seeding completed successfully!');
 }
 
 main()
     .catch((e) => {
-        console.error(e);
+        console.error('❌ Seeding failed:', e);
         process.exit(1);
     })
     .finally(async () => {
