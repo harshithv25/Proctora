@@ -1,0 +1,205 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  name             String
+  rollNumber       String?  @unique
+  passwordHash     String
+  role             String   @default("STUDENT") // STUDENT, ADMIN
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdExams     Exam[]           @relation("ExamCreator")
+  accommodations   Accommodation[]
+  sessions         ExamSession[]
+  diagnostics      DeviceDiagnostic[]
+  proctorLogs      ProctoringLog[]
+  telemetryLogs    EditorTelemetry[]
+  focusLogs        BrowserFocusLog[]
+  alerts           ProctorAlert[]
+  responses        Response[]
+}
+
+model Exam {
+  id              String   @id @default(uuid())
+  title           String
+  description     String?
+  durationMinutes Int      @default(60)
+  startTime       DateTime?
+  endTime         DateTime?
+  shufflingMode   String   @default("RANDOM") // RANDOM, SEATING
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy       User            @relation("ExamCreator", fields: [createdById], references: [id])
+  questions       Question[]
+  seatingPlans    SeatingPlan[]
+  accommodations  Accommodation[]
+  sessions        ExamSession[]
+}
+
+model Question {
+  id            String   @id @default(uuid())
+  examId        String
+  title         String
+  description   String
+  type          String   @default("MCQ") // MCQ, CODING, SHORT_ANSWER
+  optionsJson   String?  // JSON string for options array e.g. ["A", "B", "C", "D"]
+  correctAnswer String?
+  starterCode   String?
+  testCasesJson String?  // JSON string for test cases
+  points        Int      @default(1)
+  orderIndex    Int      @default(0)
+
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  telemetries   EditorTelemetry[]
+  responses     Response[]
+}
+
+model SeatingPlan {
+  id         String   @id @default(uuid())
+  examId     String
+  rollNumber String
+  seatRow    Int
+  seatCol    Int
+  seatLabel  String
+  createdAt  DateTime @default(now())
+
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, rollNumber])
+}
+
+model Accommodation {
+  id           String   @id @default(uuid())
+  examId       String
+  candidateId  String
+  extraMinutes Int      @default(0)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  exam         Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  candidate    User     @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, candidateId])
+}
+
+model ExamSession {
+  id                        String    @id @default(uuid())
+  examId                    String
+  candidateId               String
+  status                    String    @default("NOT_STARTED") // NOT_STARTED, DIAGNOSTICS_PASSED, IN_PROGRESS, COMPLETED, TERMINATED, AUTOLOGOUT
+  startedAt                 DateTime?
+  endedAt                   DateTime?
+  seatLabel                 String?
+  assignedQuestionsJson     String?   // JSON array of question IDs in shuffled order
+  fullscreenViolationsCount Int       @default(0)
+  focusLossCount            Int       @default(0)
+  lastActivityAt            DateTime  @default(now())
+  createdAt                 DateTime  @default(now())
+
+  exam         Exam               @relation(fields: [examId], references: [id], onDelete: Cascade)
+  candidate    User               @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  diagnostics  DeviceDiagnostic[]
+  proctorLogs  ProctoringLog[]
+  telemetries  EditorTelemetry[]
+  focusLogs    BrowserFocusLog[]
+  alerts       ProctorAlert[]
+  responses    Response[]
+}
+
+model DeviceDiagnostic {
+  id               String   @id @default(uuid())
+  sessionId        String
+  candidateId      String
+  browserInfo      String
+  webcamPassed     Boolean  @default(true)
+  micPassed        Boolean  @default(true)
+  bandwidthPassed  Boolean  @default(true)
+  status           String   @default("PASS") // PASS, FAIL
+  remediationNotes String?
+  timestamp        DateTime @default(now())
+
+  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidate User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model ProctoringLog {
+  id                String   @id @default(uuid())
+  sessionId         String
+  candidateId       String
+  cheatingScore     Float    @default(0.0) // 0.0 to 1.0
+  flaggedEvent      String?  // GAZE_AWAY, MULTIPLE_FACES, NO_FACE, HEAD_POSE, LOW_LIGHT
+  rollingWindowDataJson String?
+  timestamp         DateTime @default(now())
+
+  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidate User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model EditorTelemetry {
+  id          String   @id @default(uuid())
+  sessionId   String
+  candidateId String
+  questionId  String?
+  eventType   String   // KEYSTROKE, TEXT_DELTA, PASTE, RUN, SUBMIT
+  eventDataJson String // JSON payload of change/code snapshot
+  timestamp   DateTime @default(now())
+
+  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidate User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  question  Question?   @relation(fields: [questionId], references: [id], onDelete: SetNull)
+}
+
+model BrowserFocusLog {
+  id          String   @id @default(uuid())
+  sessionId   String
+  candidateId String
+  eventType   String   // BLUR, FOCUS, VISIBILITY_HIDDEN, FULLSCREEN_EXIT, FULLSCREEN_ENTER
+  timestamp   DateTime @default(now())
+
+  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidate User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model ProctorAlert {
+  id          String   @id @default(uuid())
+  sessionId   String
+  candidateId String
+  alertType   String   // HIGH_CHEATING_SCORE, FOCUS_LOSS_EXCEEDED, IDLE_TIMEOUT, FULLSCREEN_EXIT
+  severity    String   @default("WARNING") // WARNING, CRITICAL
+  message     String
+  resolved    Boolean  @default(false)
+  timestamp   DateTime @default(now())
+
+  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidate User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model Response {
+  id             String   @id @default(uuid())
+  sessionId      String
+  candidateId    String
+  questionId     String
+  answerText     String?
+  codeSubmission String?
+  isAutoSaved    Boolean  @default(true)
+  submittedAt    DateTime @default(now())
+
+  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidate User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  question  Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId])
+}
