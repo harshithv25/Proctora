@@ -8,12 +8,18 @@
   import RegisterPage from './pages/RegisterPage.svelte';
   import TwoFactorSetupPage from './pages/TwoFactorSetupPage.svelte';
   import DashboardPage from './pages/DashboardPage.svelte';
+  import DeviceCheckPage from './pages/DeviceCheckPage.svelte';
+  import ExamPortalPage from './pages/ExamPortalPage.svelte';
+  import ExamSubmittedPage from './pages/ExamSubmittedPage.svelte';
 
   const routes = {
     '/login': LoginPage,
     '/register': RegisterPage,
     '/2fa-setup': TwoFactorSetupPage,
     '/dashboard': DashboardPage,
+    '/exams/:examId/device-check': DeviceCheckPage,
+    '/exams/:examId/portal': ExamPortalPage,
+    '/exams/:examId/submitted': ExamSubmittedPage,
   };
 
   onMount(() => {
