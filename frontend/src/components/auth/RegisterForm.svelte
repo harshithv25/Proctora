@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { push } from 'svelte-spa-router';
   import Input from '../ui/Input.svelte';
   import Button from '../ui/Button.svelte';
   import { authStore } from '../../stores/auth.store.svelte';
@@ -45,18 +46,21 @@
     return Object.keys(errors).length === 0;
   }
 
-  function handleSubmit(e: SubmitEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     if (!validate()) return;
 
-    authStore.setLoading(true);
-    authStore.setError(null);
+    const result = await authStore.register({
+      name: authStore.form.name,
+      email: authStore.form.email,
+      rollNumber: authStore.form.rollNumber,
+      password: authStore.form.password,
+    });
 
-    // Simulate API call — will be connected later
-    setTimeout(() => {
-      authStore.setLoading(false);
-      appStore.addToast('Registration is not connected to the backend yet.', 'info');
-    }, 1200);
+    if (result.success) {
+      appStore.addToast('Account created successfully! Please sign in.', 'success');
+      push('/login');
+    }
   }
 </script>
 

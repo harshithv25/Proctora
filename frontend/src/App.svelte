@@ -6,10 +6,14 @@
   import ToastContainer from './components/layout/ToastContainer.svelte';
   import LoginPage from './pages/LoginPage.svelte';
   import RegisterPage from './pages/RegisterPage.svelte';
+  import TwoFactorSetupPage from './pages/TwoFactorSetupPage.svelte';
+  import DashboardPage from './pages/DashboardPage.svelte';
 
   const routes = {
     '/login': LoginPage,
     '/register': RegisterPage,
+    '/2fa-setup': TwoFactorSetupPage,
+    '/dashboard': DashboardPage,
   };
 
   onMount(() => {
