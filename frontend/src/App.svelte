@@ -11,6 +11,8 @@
   import DeviceCheckPage from './pages/DeviceCheckPage.svelte';
   import ExamPortalPage from './pages/ExamPortalPage.svelte';
   import ExamSubmittedPage from './pages/ExamSubmittedPage.svelte';
+  import AdminExamsPage from './pages/AdminExamsPage.svelte';
+  import AdminMonitorPage from './pages/AdminMonitorPage.svelte';
 
   const routes = {
     '/login': LoginPage,
@@ -20,6 +22,8 @@
     '/exams/:examId/device-check': DeviceCheckPage,
     '/exams/:examId/portal': ExamPortalPage,
     '/exams/:examId/submitted': ExamSubmittedPage,
+    '/admin/exams': AdminExamsPage,
+    '/admin/exams/:examId/monitor': AdminMonitorPage,
   };
 
   onMount(() => {
