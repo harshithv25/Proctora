@@ -1,7 +1,11 @@
-import { definePrismaConfig } from "prisma/config";
+import path from "path";
+import { defineConfig } from "prisma/config";
 
-export default definePrismaConfig({
-  skills: {
-    agents: ["claude", "cursor", "agents", "devin"],
+export default defineConfig({
+  schema: path.join(__dirname, "prisma", "schema.prisma"),
+  migrate: {
+    async url() {
+      return process.env.DATABASE_URL!;
+    },
   },
 });

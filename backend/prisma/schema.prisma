@@ -1,236 +1,131 @@
-datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
-}
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// ── Users ─────────────────────────────────────────────────────────────────────
-model User {
-  id                  String   @id @default(uuid())
-  email               String   @unique
-  name                String
-  rollNumber          String?  @unique          // candidates only
-  passwordHash        String
-  totpSecret          String?                   // AES-256-GCM encrypted at rest
-  twoFactorEnabled    Boolean  @default(false)
-  isLocked            Boolean  @default(false)  // lockout after repeated failures (F.1)
-  failedLoginAttempts Int      @default(0)
-  role                String   @default("CANDIDATE") // CANDIDATE | ADMIN
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  createdExams     Exam[]           @relation("ExamCreator")
-  userSessions     Session[]
-  accommodations   Accommodation[]
-  examSessions     ExamSession[]
-  diagnostics      DeviceDiagnostic[]
-  proctoringEvents ProctoringEvent[]
-  editorTelemetry  EditorTelemetryEvent[]
-  focusLogs        FocusLog[]
-  alerts           ProctorAlert[]
-  examResponses    ExamResponse[]
+datasource db {
+  provider = "postgresql"
 }
 
-// ── Auth Sessions (refresh tokens) ───────────────────────────────────────────
+enum Role {
+  CANDIDATE
+  ADMIN
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  role                Role
+  name                String
+  email               String   @unique
+  rollNumber          String?  @unique
+  passwordHash        String
+  totpSecret          String?
+  isLocked            Boolean  @default(false)
+  failedLoginAttempts Int      @default(0)
+  createdAt           DateTime @default(now())
+
+  sessions         Session[]
+  examResponses    ExamResponse[]
+  accommodations   Accommodation[]
+  proctoringEvents ProctoringEvent[]
+  focusLogs        FocusLog[]
+  editorTelemetry  EditorTelemetryEvent[]
+}
+
 model Session {
   id           String   @id @default(uuid())
   userId       String
-  refreshToken String   @unique           // SHA-256 hash of raw token
+  user         User     @relation(fields: [userId], references: [id])
+  refreshToken String   @unique
   userAgent    String?
   ipAddress    String?
   expiresAt    DateTime
   createdAt    DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ── Exams ────────────────────────────────────────────────────────────────────
 model Exam {
-  id              String    @id @default(uuid())
-  title           String
-  description     String?
-  durationMinutes Int       @default(60)
-  idleTimeoutSec  Int       @default(300)      // C.7 idle session timeout
-  startTime       DateTime?
-  endTime         DateTime?
-  shufflingMode   String    @default("RANDOM") // RANDOM | SEATING
-  createdBy       String                       // userId string (plan uses plain String)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String   @id @default(uuid())
+  title          String
+  startTime      DateTime
+  endTime        DateTime
+  idleTimeoutSec Int      @default(300)
+  createdBy      String
+  createdAt      DateTime @default(now())
 
-  creator        User            @relation("ExamCreator", fields: [createdBy], references: [id])
   questions      Question[]
   seatingPlan    SeatingAssignment[]
+  responses      ExamResponse[]
   accommodations Accommodation[]
-  examSessions   ExamSession[]
-  examResponses  ExamResponse[]
 }
 
-// ── Questions ────────────────────────────────────────────────────────────────
 model Question {
+  id       String @id @default(uuid())
+  examId   String
+  exam     Exam   @relation(fields: [examId], references: [id])
+  content  String
+  type     String
+  metadata Json?
+}
+
+model SeatingAssignment {
   id            String  @id @default(uuid())
   examId        String
-  title         String
-  content       String  // canonical field name matching plan
-  type          String  @default("MCQ") // MCQ | CODING | SHORT_ANSWER
-  metadata      String? // JSON blob — options, correctAnswer, starterCode, testCases, points, orderIndex
-  orderIndex    Int     @default(0)
-
-  exam         Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
-  telemetry    EditorTelemetryEvent[] @relation("QuestionTelemetry")
-  responses    ExamResponse[]         @relation("QuestionResponses")
-}
-
-// ── Seating Plan (matches plan model name SeatingAssignment) ─────────────────
-model SeatingAssignment {
-  id            String @id @default(uuid())
-  examId        String
+  exam          Exam    @relation(fields: [examId], references: [id])
   rollNumber    String
   seatRow       Int
   seatCol       Int
-  seatLabel     String?
-  questionSetId String? // optional per-seat question set override
-
-  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
-
-  @@unique([examId, rollNumber])
+  questionSetId String?
 }
 
-// ── Accommodations ───────────────────────────────────────────────────────────
 model Accommodation {
   id           String   @id @default(uuid())
   examId       String
-  userId       String                     // plan uses userId not candidateId
-  extraTimeSec Int      @default(0)       // plan uses extraTimeSec (seconds, not minutes)
-  approvedBy   String                     // userId of admin who approved
-  notes        String?
+  exam         Exam     @relation(fields: [examId], references: [id])
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  extraTimeSec Int
+  approvedBy   String
   createdAt    DateTime @default(now())
-
-  exam      Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
-  candidate User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([examId, userId])
 }
 
-// ── Exam Sessions ─────────────────────────────────────────────────────────────
-model ExamSession {
-  id                    String    @id @default(uuid())
-  examId                String
-  candidateId           String
-  status                String    @default("NOT_STARTED") // NOT_STARTED | DIAGNOSTICS_PASSED | IN_PROGRESS | COMPLETED | TERMINATED | AUTOLOGOUT
-  startedAt             DateTime?
-  endedAt               DateTime?
-  seatLabel             String?
-  assignedQuestions     String?   // JSON array of question IDs in shuffled order
-  focusLossCount        Int       @default(0)
-  fullscreenExitCount   Int       @default(0)
-  lastActivityAt        DateTime  @default(now())
-  createdAt             DateTime  @default(now())
-
-  exam             Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
-  candidate        User                   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  diagnostics      DeviceDiagnostic[]
-  proctoringEvents ProctoringEvent[]
-  editorTelemetry  EditorTelemetryEvent[]
-  focusLogs        FocusLog[]
-  alerts           ProctorAlert[]
-}
-
-// ── Device Diagnostics ───────────────────────────────────────────────────────
-model DeviceDiagnostic {
-  id               String   @id @default(uuid())
-  examId           String?
-  sessionId        String
-  candidateId      String
-  browserInfo      String
-  webcamPassed     Boolean  @default(true)
-  micPassed        Boolean  @default(true)
-  bandwidthPassed  Boolean  @default(true)
-  status           String   @default("PASS") // PASS | FAIL
-  remediationNotes String?
-  timestamp        DateTime @default(now())
-
-  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  candidate User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-}
-
-// ── Proctoring Events (matches plan model name ProctoringEvent) ───────────────
-model ProctoringEvent {
-  id                 String   @id @default(uuid())
-  examId             String
-  sessionId          String
-  userId             String
-  cheatProbability   Float    @default(0.0) // 0.0 – 1.0 rolling window score
-  windowStart        DateTime
-  windowEnd          DateTime
-  flagged            Boolean  @default(false)
-  detailsEncrypted   String?  // AES-256-GCM ciphertext of gaze/head-pose data
-  createdAt          DateTime @default(now())
-
-  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  candidate User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-// ── Focus Logs (matches plan model name FocusLog, includes examId) ────────────
-model FocusLog {
-  id        String   @id @default(uuid())
-  examId    String                          // plan has examId directly
-  sessionId String
-  userId    String
-  eventType String   // blur | focus | visibility_hidden | fullscreen_exit | fullscreen_enter
-  timestamp DateTime @default(now())
-
-  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  candidate User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-// ── Editor Telemetry (matches plan EditorTelemetryEvent, includes examId) ─────
-model EditorTelemetryEvent {
-  id         String   @id @default(uuid())
-  examId     String                          // plan has examId directly
-  sessionId  String
-  questionId String?
-  userId     String
-  eventType  String   // keystroke | paste | run | submit
-  payload    String   // JSON — text delta, cursor pos, code snapshot etc.
-  timestamp  DateTime @default(now())
-
-  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  candidate User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question  Question?   @relation("QuestionTelemetry", fields: [questionId], references: [id], onDelete: SetNull)
-}
-
-// ── Proctor Alerts ───────────────────────────────────────────────────────────
-model ProctorAlert {
-  id        String   @id @default(uuid())
-  examId    String
-  sessionId String
-  userId    String
-  alertType String   // HIGH_CHEATING_SCORE | FOCUS_LOSS_EXCEEDED | IDLE_TIMEOUT | FULLSCREEN_EXIT
-  severity  String   @default("WARNING") // WARNING | CRITICAL
-  message   String
-  resolved  Boolean  @default(false)
-  timestamp DateTime @default(now())
-
-  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  candidate User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-// ── Exam Responses (matches plan ExamResponse — single encrypted answers blob) ─
 model ExamResponse {
   id           String   @id @default(uuid())
   examId       String
+  exam         Exam     @relation(fields: [examId], references: [id])
   userId       String
-  sessionId    String?
-  questionId   String?                      // null when submittedVia = "auto_logout"
-  answers      String                       // AES-256-GCM encrypted JSON blob
-  submittedVia String                       // manual | timer_expiry | auto_logout
+  user         User     @relation(fields: [userId], references: [id])
+  answers      Json
+  submittedVia String
   submittedAt  DateTime @default(now())
+}
 
-  exam      Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
-  candidate User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question  Question? @relation("QuestionResponses", fields: [questionId], references: [id], onDelete: SetNull)
+model ProctoringEvent {
+  id               String   @id @default(uuid())
+  examId           String
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  cheatProbability Float
+  windowStart      DateTime
+  windowEnd        DateTime
+  flagged          Boolean  @default(false)
+  detailsEncrypted String
+  createdAt        DateTime @default(now())
+}
+
+model FocusLog {
+  id        String   @id @default(uuid())
+  examId    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventType String
+  timestamp DateTime @default(now())
+}
+
+model EditorTelemetryEvent {
+  id        String   @id @default(uuid())
+  examId    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventType String
+  payload   Json
+  timestamp DateTime @default(now())
 }
