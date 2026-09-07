@@ -1,20 +1,34 @@
 <!--
   Full-page loading screen.
   Displayed on initial page load with a smooth fade-out animation.
-  Uses the Proctora wordmark + a minimal pulse animation.
+  Uses the Proctora wordmark + a minimal pulse animation with a strict failsafe auto-dismiss.
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { appStore } from '../../stores/app.store.svelte';
 
   let visible = $state(true);
   let fadingOut = $state(false);
 
+  function dismiss() {
+    if (fadingOut) return;
+    fadingOut = true;
+    setTimeout(() => {
+      visible = false;
+      appStore.setPageLoading(false);
+    }, 300);
+  }
+
+  onMount(() => {
+    const timer = setTimeout(() => {
+      dismiss();
+    }, 450);
+    return () => clearTimeout(timer);
+  });
+
   $effect(() => {
-    if (!appStore.isPageLoading && visible) {
-      fadingOut = true;
-      setTimeout(() => {
-        visible = false;
-      }, 500);
+    if (!appStore.isPageLoading && visible && !fadingOut) {
+      dismiss();
     }
   });
 </script>
@@ -39,7 +53,7 @@
     align-items: center;
     justify-content: center;
     background-color: var(--color-bg);
-    transition: opacity 0.5s var(--ease);
+    transition: opacity 0.3s var(--ease);
   }
 
   .page-loader.fading-out {
@@ -60,7 +74,7 @@
     letter-spacing: 6px;
     text-transform: lowercase;
     color: var(--color-text-primary);
-    animation: fadeIn 0.6s var(--ease) both;
+    animation: fadeIn 0.4s var(--ease) both;
   }
 
   .loader-bar {
@@ -69,7 +83,6 @@
     background-color: var(--color-border);
     border-radius: var(--radius);
     overflow: hidden;
-    animation: fadeIn 0.6s var(--ease) 0.2s both;
   }
 
   .loader-bar-fill {

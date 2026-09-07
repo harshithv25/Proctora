@@ -8,6 +8,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "db:migrate": "npx prisma migrate dev",
+    "db:push": "npx prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
     "db:generate": "npx prisma generate",
     "db:studio": "npx prisma studio",
     "db:validate": "npx prisma validate"

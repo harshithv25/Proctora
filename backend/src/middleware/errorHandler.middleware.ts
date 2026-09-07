@@ -43,6 +43,17 @@ export function errorHandler(
       });
       return;
     }
+    if (err.code === "P2003") {
+      res.status(404).json({
+        error: {
+          code: "RESOURCE_NOT_FOUND",
+          message:
+            "A referenced record (e.g. exam or candidate user) does not exist in the database.",
+          details: env.NODE_ENV === "development" ? err.meta : undefined,
+        },
+      });
+      return;
+    }
   }
 
   if (err instanceof Prisma.PrismaClientInitializationError) {

@@ -42,17 +42,22 @@
 
 <style>
   .auth-page {
+    width: 100%;
     min-height: 100dvh;
+    flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: var(--space-4);
+    padding: var(--space-6) var(--space-4);
     background-color: var(--color-bg);
+    margin: 0 auto;
   }
 
   .auth-container {
     width: 100%;
     max-width: 400px;
+    margin: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);

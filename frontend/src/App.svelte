@@ -26,7 +26,10 @@
     '/admin/exams/:examId/monitor': AdminMonitorPage,
   };
 
+  import { appStore } from './stores/app.store.svelte';
+
   onMount(() => {
+    setTimeout(() => appStore.setPageLoading(false), 200);
     if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#') {
       replace('/login');
     }
