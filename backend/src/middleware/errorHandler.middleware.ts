@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { Prisma } from "@prisma/client";
 import { AppError } from "../lib/apiError";
 import { env } from "../config/env";
 
@@ -14,6 +15,43 @@ export function errorHandler(
         code: err.code,
         message: err.message,
         details: env.NODE_ENV === "development" ? err.details : undefined,
+      },
+    });
+    return;
+  }
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P1000") {
+      res.status(503).json({
+        error: {
+          code: "DB_AUTH_FAILED",
+          message:
+            "Database authentication failed. Please check DATABASE_URL credentials in backend/.env.",
+          details: env.NODE_ENV === "development" ? err.message : undefined,
+        },
+      });
+      return;
+    }
+    if (err.code === "P2002") {
+      const target = (err.meta?.target as string[])?.join(", ") || "field";
+      res.status(409).json({
+        error: {
+          code: "DB_UNIQUE_VIOLATION",
+          message: `A record with this ${target} already exists.`,
+          details: env.NODE_ENV === "development" ? err.meta : undefined,
+        },
+      });
+      return;
+    }
+  }
+
+  if (err instanceof Prisma.PrismaClientInitializationError) {
+    res.status(503).json({
+      error: {
+        code: "DB_UNAVAILABLE",
+        message:
+          "Database server is unreachable. Please make sure PostgreSQL is running and DATABASE_URL is valid.",
+        details: env.NODE_ENV === "development" ? err.message : undefined,
       },
     });
     return;
