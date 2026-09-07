@@ -68,6 +68,16 @@ export function errorHandler(
     return;
   }
 
+  if ((err as any).code === "EBADCSRFTOKEN") {
+    res.status(403).json({
+      error: {
+        code: "INVALID_CSRF_TOKEN",
+        message: "Invalid or missing CSRF token. Please refresh the page.",
+      },
+    });
+    return;
+  }
+
   console.error("[Unhandled Error]:", err);
 
   res.status(500).json({
