@@ -15,8 +15,11 @@ export async function deviceCheck(req: Request, res: Response, next: NextFunctio
 
 export async function getQuestions(req: Request, res: Response, next: NextFunction) {
   try {
-    const questions = await examDeliveryService.getQuestions(req.params.examId as string);
-    res.json({ data: questions });
+    const result = await examDeliveryService.getQuestions(
+      req.params.examId as string,
+      req.user?.userId
+    );
+    res.json({ data: result });
   } catch (err) {
     next(err);
   }

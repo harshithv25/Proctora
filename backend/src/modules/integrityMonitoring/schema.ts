@@ -8,12 +8,12 @@ export const proctoringFrameSchema = z.object({
 });
 
 export const editorTelemetrySchema = z.object({
-  eventType: z.enum(["keystroke", "paste", "run", "submit"]),
-  payload: z.any(),
+  eventType: z.string(),
+  payload: z.any().optional(),
 });
 
 export const focusEventSchema = z.object({
-  eventType: z.enum(["blur", "focus", "visibility_hidden"]),
+  eventType: z.string(),
 });
 
 export const autoLogoutSchema = z.object({

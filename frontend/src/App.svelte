@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Router from 'svelte-spa-router';
-  import { replace } from 'svelte-spa-router';
+  import Router from './lib/Router.svelte';
+  import { replace } from './lib/router.svelte';
   import { onMount } from 'svelte';
   import PageLoader from './components/layout/PageLoader.svelte';
   import ToastContainer from './components/layout/ToastContainer.svelte';
@@ -30,7 +30,7 @@
 
   onMount(() => {
     setTimeout(() => appStore.setPageLoading(false), 200);
-    if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#') {
+    if (window.location.pathname === '/' || window.location.pathname === '') {
       replace('/login');
     }
   });
@@ -46,6 +46,8 @@
 <style>
   main {
     flex: 1;
+    width: 100%;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
   }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { push } from 'svelte-spa-router';
+  import { push } from '../../lib/router.svelte';
   import Input from '../ui/Input.svelte';
   import Button from '../ui/Button.svelte';
   import { authStore } from '../../stores/auth.store.svelte';

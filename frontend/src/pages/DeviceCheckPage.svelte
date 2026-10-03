@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { push } from 'svelte-spa-router';
+  import { push } from '../lib/router.svelte';
   import Button from '../components/ui/Button.svelte';
   import { api, getErrorMessage } from '../lib/api';
   import { appStore } from '../stores/app.store.svelte';
@@ -10,7 +10,7 @@
     params?: { examId?: string };
   }
 
-  let { params } = $props<Props>();
+  let { params }: Props = $props();
   const examId = $derived(params?.examId || 'demo-exam-1');
 
   let mounted = $state(false);
@@ -193,8 +193,11 @@
 
 <style>
   .check-page {
+    width: 100%;
     min-height: 100dvh;
+    flex: 1;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     padding: var(--space-6) var(--space-4);
@@ -202,6 +205,7 @@
     opacity: 0;
     transform: translateY(6px);
     transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+    margin: 0 auto;
   }
 
   .check-page.visible {
@@ -212,6 +216,7 @@
   .check-container {
     width: 100%;
     max-width: 820px;
+    margin: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);

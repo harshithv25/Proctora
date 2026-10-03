@@ -34,6 +34,13 @@ router.post(
 );
 
 router.post(
+  "/2fa/confirm",
+  authenticate,
+  strictLimiter,
+  authController.confirmTotp
+);
+
+router.post(
   "/admin/create",
   authenticate,
   requireRole("ADMIN"),

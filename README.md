@@ -10,6 +10,11 @@
 
 ---
 
+> **Looking for the Complete Master Setup & Operations Guide?**  
+> Read [`MASTER_SETUP_AND_ARCHITECTURE_GUIDE.md`](file:///home/harshith/dev/Proctora/MASTER_SETUP_AND_ARCHITECTURE_GUIDE.md) for step-by-step installation instructions, environment configs, database maintenance scripts, all 7 system workflow Mermaid diagrams, and the complete 28-endpoint API reference catalog.
+
+---
+
 ## 📌 Executive Summary
 
 **Proctora** is a full-featured, real-time online assessment and programming contest platform designed to guarantee academic integrity in remote and computer-lab examinations. Developed as a Software Engineering Course Project at the **Department of Information Technology, National Institute of Technology Karnataka (NITK), Surathkal**, Proctora delivers a robust, browser-only testing environment with zero client-side installation requirements.

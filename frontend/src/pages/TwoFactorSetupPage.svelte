@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { push } from 'svelte-spa-router';
+  import { push } from '../lib/router.svelte';
   import Button from '../components/ui/Button.svelte';
   import Input from '../components/ui/Input.svelte';
   import { authStore } from '../stores/auth.store.svelte';
@@ -36,9 +36,15 @@
     setTimeout(() => { isCopied = false; }, 2000);
   }
 
-  function handleContinue() {
-    appStore.addToast('Two-Factor Authentication configured successfully', 'success');
-    push('/dashboard');
+  async function handleContinue() {
+    if (!secret) return;
+    const res = await authStore.confirm2FA(secret);
+    if (res.success) {
+      appStore.addToast('Two-Factor Authentication configured successfully', 'success');
+      push('/dashboard');
+    } else {
+      appStore.addToast(res.error || 'Failed to save 2FA configuration', 'error');
+    }
   }
 </script>
 
@@ -89,7 +95,7 @@
         {/if}
 
         <div class="actions">
-          <Button variant="primary" fullWidth onclick={handleContinue}>
+          <Button variant="primary" fullWidth loading={authStore.isLoading} onclick={handleContinue}>
             Done & Proceed
           </Button>
           <Button variant="ghost" fullWidth onclick={() => push('/dashboard')}>
@@ -107,17 +113,22 @@
 
 <style>
   .auth-page {
+    width: 100%;
     min-height: 100dvh;
+    flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: var(--space-4);
+    padding: var(--space-6) var(--space-4);
     background-color: var(--color-bg);
+    margin: 0 auto;
   }
 
   .auth-container {
     width: 100%;
     max-width: 440px;
+    margin: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);

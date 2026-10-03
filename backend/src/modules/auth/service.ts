@@ -16,6 +16,7 @@ import {
   UnauthorizedError,
   ForbiddenError,
   NotFoundError,
+  BadRequestError,
 } from "../../lib/apiError";
 import { RegisterInput, LoginInput, AdminCreateInput } from "./schema";
 import { env } from "../../config/env";
@@ -210,7 +211,24 @@ export async function setupTotp(userId: string) {
     throw new NotFoundError("User not found", "USER_NOT_FOUND");
   }
 
+  // Generate ephemeral setup secret without updating the database.
+  // The secret is only persisted when the candidate explicitly clicks 'Done & Proceed'
+  // via confirmTotp, preventing accidental lockouts.
   const { secret, otpauthUrl } = generateTotpSecret();
+  return { secret, otpauthUrl };
+}
+
+export async function confirmTotp(userId: string, secret: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user) {
+    throw new NotFoundError("User not found", "USER_NOT_FOUND");
+  }
+
+  if (!secret) {
+    throw new BadRequestError("TOTP secret is required", "AUTH_INVALID_SECRET");
+  }
+
   const encryptedSecret = encryptTotpSecret(secret);
 
   await prisma.user.update({
@@ -218,7 +236,7 @@ export async function setupTotp(userId: string) {
     data: { totpSecret: encryptedSecret },
   });
 
-  return { secret, otpauthUrl };
+  return { message: "Two-factor authentication configured successfully" };
 }
 
 export async function createAdmin(data: AdminCreateInput) {

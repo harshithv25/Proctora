@@ -4,6 +4,8 @@
   and optional error message display.
 -->
 <script lang="ts">
+  import type { HTMLInputAttributes } from 'svelte/elements';
+
   interface Props {
     id: string;
     type?: string;
@@ -12,7 +14,7 @@
     placeholder?: string;
     error?: string;
     disabled?: boolean;
-    autocomplete?: string;
+    autocomplete?: HTMLInputAttributes['autocomplete'];
     oninput?: (value: string) => void;
   }
 

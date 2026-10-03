@@ -12,7 +12,11 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:generate": "npx prisma generate",
     "db:studio": "npx prisma studio",
-    "db:validate": "npx prisma validate"
+    "db:validate": "npx prisma validate",
+    "db:flush-users": "tsx src/scripts/flushNonAdminUsers.ts",
+    "db:flush-exams": "tsx src/scripts/flushExams.ts",
+    "db:reset-except-admin": "tsx src/scripts/resetDatabaseExceptAdmin.ts",
+    "seed:oa": "tsx src/scripts/seedMorganStanleyOA.ts"
   },
   "keywords": [],
   "author": "",

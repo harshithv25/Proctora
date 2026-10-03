@@ -44,36 +44,48 @@ model Session {
 
 model Exam {
   id             String   @id @default(uuid())
+  testId         String?
   title          String
-  startTime      DateTime
-  endTime        DateTime
+  description    String?
+  location       String?
+  maxStudents    Int?
+  duration       Int      @default(60)
+  startTime      DateTime @default(now())
+  endTime        DateTime @default(now())
   idleTimeoutSec Int      @default(300)
   createdBy      String
+  seatingCsv     String?
+  seatingGrid    Json?
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
   questions      Question[]
   seatingPlan    SeatingAssignment[]
   responses      ExamResponse[]
   accommodations Accommodation[]
+
+  @@index([testId])
 }
 
 model Question {
   id       String @id @default(uuid())
   examId   String
-  exam     Exam   @relation(fields: [examId], references: [id])
+  exam     Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
   content  String
   type     String
+  order    Int    @default(0)
   metadata Json?
 }
 
 model SeatingAssignment {
   id            String  @id @default(uuid())
   examId        String
-  exam          Exam    @relation(fields: [examId], references: [id])
+  exam          Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
   rollNumber    String
   seatRow       Int
   seatCol       Int
   questionSetId String?
+  questionOrder Json?
 }
 
 model Accommodation {
@@ -88,14 +100,18 @@ model Accommodation {
 }
 
 model ExamResponse {
-  id           String   @id @default(uuid())
-  examId       String
-  exam         Exam     @relation(fields: [examId], references: [id])
-  userId       String
-  user         User     @relation(fields: [userId], references: [id])
-  answers      Json
-  submittedVia String
-  submittedAt  DateTime @default(now())
+  id                String    @id @default(uuid())
+  examId            String
+  exam              Exam      @relation(fields: [examId], references: [id])
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  answers           Json
+  score             Float?
+  maxScore          Float?
+  evaluationDetails Json?
+  submittedVia      String
+  startedAt         DateTime? @default(now())
+  submittedAt       DateTime  @default(now())
 }
 
 model ProctoringEvent {

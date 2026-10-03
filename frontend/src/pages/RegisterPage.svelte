@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { push } from 'svelte-spa-router';
+  import { push } from '../lib/router.svelte';
   import RegisterForm from '../components/auth/RegisterForm.svelte';
   import Divider from '../components/ui/Divider.svelte';
   import Button from '../components/ui/Button.svelte';

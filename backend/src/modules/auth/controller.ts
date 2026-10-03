@@ -86,6 +86,16 @@ export async function setupTotp(req: Request, res: Response, next: NextFunction)
   }
 }
 
+export async function confirmTotp(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { secret } = req.body;
+    const result = await authService.confirmTotp(req.user!.userId, secret);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function createAdmin(req: Request, res: Response, next: NextFunction) {
   try {
     const user = await authService.createAdmin(req.body);

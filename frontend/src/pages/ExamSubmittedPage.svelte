@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { push } from 'svelte-spa-router';
+  import { push } from '../lib/router.svelte';
   import Button from '../components/ui/Button.svelte';
   import { authStore } from '../stores/auth.store.svelte';
 
@@ -8,7 +8,7 @@
     params?: { examId?: string };
   }
 
-  let { params } = $props<Props>();
+  let { params }: Props = $props();
   const examId = $derived(params?.examId || 'demo-exam-1');
 
   let mounted = $state(false);
@@ -73,17 +73,22 @@
 
 <style>
   .submitted-page {
+    width: 100%;
     min-height: 100dvh;
+    flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: var(--space-4);
+    padding: var(--space-6) var(--space-4);
     background-color: var(--color-bg);
+    margin: 0 auto;
   }
 
   .submitted-container {
     width: 100%;
     max-width: 440px;
+    margin: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);

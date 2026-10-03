@@ -145,6 +145,21 @@ function createAuthStore() {
     }
   }
 
+  async function confirm2FA(secret: string) {
+    isLoading = true;
+    error = null;
+    try {
+      const res = await api.post('/auth/2fa/confirm', { secret });
+      return { success: true, data: res.data.data };
+    } catch (err) {
+      const msg = getErrorMessage(err);
+      error = msg;
+      return { success: false, error: msg };
+    } finally {
+      isLoading = false;
+    }
+  }
+
   async function logout() {
     try {
       await api.post('/auth/logout', {});
@@ -172,6 +187,7 @@ function createAuthStore() {
     login,
     register,
     setup2FA,
+    confirm2FA,
     logout,
   };
 }

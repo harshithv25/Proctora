@@ -30,4 +30,18 @@ router.get(
   evalController.exportResponses
 );
 
+router.get(
+  "/:examId/monitor-feed",
+  authenticate,
+  requireRole("ADMIN"),
+  evalController.getMonitorFeed
+);
+
+router.get(
+  "/:examId/candidates/:userId/sheet",
+  authenticate,
+  requireRole("ADMIN"),
+  evalController.getCandidateAnswerSheet
+);
+
 export default router;
