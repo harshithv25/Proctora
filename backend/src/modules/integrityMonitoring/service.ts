@@ -11,12 +11,18 @@ export async function recordProctoringFrame(
     details: string;
   }
 ) {
+  const exam = await prisma.exam.findFirst({
+    where: { OR: [{ id: examId }, { testId: examId }] },
+    select: { id: true },
+  });
+  const resolvedExamId = exam?.id || examId;
+
   const encryptedDetails = encrypt(data.details);
-  const flagged = data.cheatProbability > 0.7;
+  const flagged = data.cheatProbability >= 0.65;
 
   return prisma.proctoringEvent.create({
     data: {
-      examId,
+      examId: resolvedExamId,
       userId,
       cheatProbability: data.cheatProbability,
       windowStart: new Date(data.windowStart),

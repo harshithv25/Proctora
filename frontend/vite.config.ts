@@ -14,6 +14,12 @@ export default defineConfig({
         target: 'ws://localhost:4000',
         ws: true,
       },
+      '/ai-proctor': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai-proctor/, ''),
+        ws: true,
+      },
     },
   },
 })

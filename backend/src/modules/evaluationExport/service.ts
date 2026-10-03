@@ -1,6 +1,7 @@
 import { prisma } from "../../config/db";
 import { AppError, NotFoundError, ForbiddenError } from "../../lib/apiError";
 import { evaluateResponses, ExamEvaluationResult } from "./grading";
+import { decrypt } from "../../lib/crypto";
 
 export async function ensureExamExists(examIdentifier: string, userId = "system") {
   const existing = await prisma.exam.findFirst({
@@ -192,7 +193,7 @@ export async function getExamMonitorFeed(examIdentifier: string) {
         },
       }),
       prisma.focusLog.findMany({
-        where: { examId: exam.id },
+        where: { OR: [{ examId: exam.id }, { examId: exam.testId || exam.id }] },
         include: {
           user: {
             select: { id: true, name: true, email: true, rollNumber: true },
@@ -202,7 +203,7 @@ export async function getExamMonitorFeed(examIdentifier: string) {
         take: 80,
       }),
       prisma.proctoringEvent.findMany({
-        where: { examId: exam.id },
+        where: { OR: [{ examId: exam.id }, { examId: exam.testId || exam.id }] },
         include: {
           user: {
             select: { id: true, name: true, email: true, rollNumber: true },
@@ -212,7 +213,7 @@ export async function getExamMonitorFeed(examIdentifier: string) {
         take: 80,
       }),
       prisma.editorTelemetryEvent.findMany({
-        where: { examId: exam.id },
+        where: { OR: [{ examId: exam.id }, { examId: exam.testId || exam.id }] },
         orderBy: { timestamp: "desc" },
         take: 120,
       }),
@@ -380,18 +381,29 @@ export async function getExamMonitorFeed(examIdentifier: string) {
         timestamp: f.timestamp.toISOString(),
       };
     }),
-    ...proctorEvents.map((p) => ({
-      id: p.id,
-      userId: p.userId,
-      userName: p.user?.name || "Candidate",
-      rollNumber: p.user?.rollNumber || "Unknown",
-      type: "AI Proctor: Anomaly detected",
-      rawEvent: "proctor_event",
-      severity: p.cheatProbability > 0.8 ? ("critical" as const) : ("warning" as const),
-      flagged: p.flagged,
-      cheatProbability: p.cheatProbability,
-      timestamp: p.createdAt.toISOString(),
-    })),
+    ...proctorEvents.map((p) => {
+      let desc = "AI Proctor: Anomaly detected";
+      if (p.detailsEncrypted) {
+        try {
+          const dec = decrypt(p.detailsEncrypted);
+          if (dec) desc = `AI Proctor: ${dec}`;
+        } catch {
+          desc = `AI Proctor: ${p.detailsEncrypted}`;
+        }
+      }
+      return {
+        id: p.id,
+        userId: p.userId,
+        userName: p.user?.name || "Candidate",
+        rollNumber: p.user?.rollNumber || "Unknown",
+        type: desc,
+        rawEvent: "proctor_event",
+        severity: p.cheatProbability > 0.8 ? ("critical" as const) : ("warning" as const),
+        flagged: p.flagged,
+        cheatProbability: p.cheatProbability,
+        timestamp: p.createdAt.toISOString(),
+      };
+    }),
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   // Metrics

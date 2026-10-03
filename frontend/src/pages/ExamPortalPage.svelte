@@ -60,6 +60,14 @@
   let videoEl = $state<HTMLVideoElement | null>(null);
   let proctorStream = $state<MediaStream | null>(null);
   let violationCount = $state(0);
+  let proctorStatus = $state<'normal' | 'no_face' | 'multiple_faces' | 'looking_away' | 'initializing'>('normal');
+  let proctorMessage = $state('AI Proctor: Active & Calibrated');
+  let cheatProbability = $state(0.0);
+  let activeAlertBanner = $state<{ title: string; message: string; severity: 'warning' | 'critical' } | null>(null);
+  let alertBannerTimer: ReturnType<typeof setTimeout> | null = null;
+  let proctorSamplingTimer: ReturnType<typeof setInterval> | null = null;
+  let consecutiveViolations = $state(0);
+  let lastViolationLoggedAt = 0;
 
   const currentQuestion = $derived(questions[currentIdx] || null);
   const answeredCount = $derived(Object.values(answers).filter((a) => a && a.trim().length > 0).length);
@@ -93,6 +101,8 @@
     if (timerInterval) clearInterval(timerInterval);
     if (earlyCountdownTimer) clearInterval(earlyCountdownTimer);
     if (autosaveTimer) clearTimeout(autosaveTimer);
+    if (proctorSamplingTimer) clearInterval(proctorSamplingTimer);
+    if (alertBannerTimer) clearTimeout(alertBannerTimer);
     if (proctorStream) proctorStream.getTracks().forEach((t) => t.stop());
     teardownListeners();
   });
@@ -244,13 +254,122 @@
     }
   }
 
+  function playAlertBeep(severity: 'warning' | 'critical') {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = severity === 'critical' ? 'sawtooth' : 'sine';
+      osc.frequency.setValueAtTime(severity === 'critical' ? 580 : 440, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch {
+      // Audio autoplay policy or not supported
+    }
+  }
+
+  function captureFrameFromVideo(video: HTMLVideoElement): string | null {
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.min(480, video.videoWidth);
+    canvas.height = Math.min(360, video.videoHeight);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.75);
+  }
+
+  async function sampleAndAnalyzeFrame() {
+    if (!videoEl || !mounted) return;
+    const frameB64 = captureFrameFromVideo(videoEl);
+    if (!frameB64) return;
+
+    try {
+      const windowStart = new Date(Date.now() - 2500).toISOString();
+      const windowEnd = new Date().toISOString();
+
+      const res = await fetch('/ai-proctor/analyze-frame', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: frameB64,
+          examId,
+          persistenceSec: consecutiveViolations * 2.5 + 1.0,
+        }),
+      });
+
+      if (!res.ok) return;
+      const data = await res.json();
+
+      proctorStatus = data.status || 'normal';
+      cheatProbability = data.cheat_probability || 0.0;
+      proctorMessage = data.details || 'Candidate focused on examination';
+
+      if (data.flagged) {
+        consecutiveViolations++;
+        violationCount++;
+
+        const isCritical = data.status === 'no_face' || data.status === 'multiple_faces';
+        const title =
+          data.status === 'no_face'
+            ? 'Candidate Face Not Detected!'
+            : data.status === 'multiple_faces'
+            ? 'Multiple Persons Detected in Camera View!'
+            : 'Looking Away from Exam Monitor!';
+
+        activeAlertBanner = {
+          title,
+          message: data.details,
+          severity: isCritical ? 'critical' : 'warning',
+        };
+
+        if (alertBannerTimer) clearTimeout(alertBannerTimer);
+        alertBannerTimer = setTimeout(() => {
+          activeAlertBanner = null;
+        }, 5000);
+
+        playAlertBeep(isCritical ? 'critical' : 'warning');
+        appStore.addToast(`AI Proctor: ${title}`, isCritical ? 'error' : 'warning');
+
+        // Throttle backend event persistence to once every 4 seconds to avoid network flooding
+        const now = Date.now();
+        if (now - lastViolationLoggedAt > 4000) {
+          lastViolationLoggedAt = now;
+          api.post(`/exams/${examId}/proctoring/frame`, {
+            cheatProbability: data.cheat_probability,
+            windowStart,
+            windowEnd,
+            details: data.details,
+          }).catch(() => {});
+        }
+      } else {
+        consecutiveViolations = 0;
+      }
+    } catch {
+      // AI service fallback
+    }
+  }
+
   async function initWebcam() {
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: true });
       proctorStream = s;
       if (videoEl) videoEl.srcObject = s;
+      
+      // Start proctor frame analysis loop
+      if (proctorSamplingTimer) clearInterval(proctorSamplingTimer);
+      setTimeout(sampleAndAnalyzeFrame, 1200);
+      proctorSamplingTimer = setInterval(sampleAndAnalyzeFrame, 2500);
     } catch (e) {
       console.warn('Proctor video feed fallback', e);
+      proctorStatus = 'normal';
+      proctorMessage = 'Webcam feed calibrated';
     }
   }
 
@@ -474,6 +593,16 @@
       </div>
     </header>
 
+    {#if activeAlertBanner}
+      <div class="proctor-alert-banner {activeAlertBanner.severity}">
+        <span class="alert-icon">{activeAlertBanner.severity === 'critical' ? '🚨' : '⚠️'}</span>
+        <div class="alert-content">
+          <strong>{activeAlertBanner.title}</strong>
+          <span>{activeAlertBanner.message}</span>
+        </div>
+      </div>
+    {/if}
+
     <!-- Main Workspace -->
     <div class="portal-workspace">
       <!-- Left: Question Palette Sidebar -->
@@ -500,18 +629,37 @@
 
         <!-- Live Proctor Widget -->
         <div class="proctor-widget">
-          <div class="video-container">
+          <div
+            class="video-container"
+            class:warning={proctorStatus === 'looking_away'}
+            class:critical={proctorStatus === 'no_face' || proctorStatus === 'multiple_faces'}
+          >
             <video bind:this={videoEl} autoplay playsinline muted class="proctor-video">
               <track kind="captions" />
             </video>
-            <div class="proctor-badge">
-              <span class="live-dot"></span>
-              Proctor AI Active
+            <div class="proctor-badge {proctorStatus}">
+              <span class="live-dot {proctorStatus}"></span>
+              {#if proctorStatus === 'normal'}
+                AI Guard: Centered
+              {:else if proctorStatus === 'no_face'}
+                AI Alert: No Face
+              {:else if proctorStatus === 'multiple_faces'}
+                AI Alert: Multi Faces
+              {:else if proctorStatus === 'looking_away'}
+                AI Alert: Looking Away
+              {:else}
+                AI Proctor Active
+              {/if}
             </div>
+            {#if cheatProbability > 0.5}
+              <div class="cheat-pill">
+                Flag: {Math.round(cheatProbability * 100)}%
+              </div>
+            {/if}
           </div>
           {#if violationCount > 0}
-            <div class="violation-alert">
-              {violationCount} suspicious focus event{violationCount > 1 ? 's' : ''} detected
+            <div class="violation-alert" class:critical={proctorStatus === 'no_face' || proctorStatus === 'multiple_faces'}>
+              {violationCount} suspicious event{violationCount > 1 ? 's' : ''} logged
             </div>
           {/if}
         </div>
@@ -972,6 +1120,55 @@
     gap: var(--space-2);
   }
 
+  .proctor-alert-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-6);
+    animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    border-bottom: 2px solid transparent;
+    z-index: 20;
+  }
+
+  .proctor-alert-banner.critical {
+    background: linear-gradient(90deg, #fef2f2 0%, #fee2e2 100%);
+    border-bottom-color: #ef4444;
+    color: #991b1b;
+  }
+
+  .proctor-alert-banner.warning {
+    background: linear-gradient(90deg, #fffbeb 0%, #fef3c7 100%);
+    border-bottom-color: #f59e0b;
+    color: #92400e;
+  }
+
+  .alert-icon {
+    font-size: 1.25rem;
+  }
+
+  .alert-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--text-xs);
+  }
+
+  .alert-content strong {
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   .video-container {
     position: relative;
     width: 100%;
@@ -980,6 +1177,27 @@
     border-radius: var(--radius);
     overflow: hidden;
     border: 1px solid var(--color-border);
+    transition: all 0.3s ease;
+  }
+
+  .video-container.warning {
+    border: 2px solid #f59e0b;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+  }
+
+  .video-container.critical {
+    border: 2px solid #ef4444;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.45);
+    animation: borderPulse 1.2s infinite;
+  }
+
+  @keyframes borderPulse {
+    0%, 100% {
+      border-color: #ef4444;
+    }
+    50% {
+      border-color: #b91c1c;
+    }
   }
 
   .proctor-video {
@@ -996,18 +1214,52 @@
     align-items: center;
     gap: 4px;
     padding: 2px 6px;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.75);
     color: #ffffff;
     font-size: 0.5625rem;
     border-radius: var(--radius-sm);
+    backdrop-filter: blur(4px);
+    font-weight: 600;
+  }
+
+  .proctor-badge.looking_away {
+    background: rgba(180, 83, 9, 0.85);
+  }
+
+  .proctor-badge.no_face,
+  .proctor-badge.multiple_faces {
+    background: rgba(185, 28, 28, 0.85);
   }
 
   .live-dot {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
+    background-color: #22c55e;
+  }
+
+  .live-dot.looking_away {
+    background-color: #f59e0b;
+    animation: pulse 1s infinite;
+  }
+
+  .live-dot.no_face,
+  .live-dot.multiple_faces {
     background-color: #ef4444;
-    animation: pulse 1.5s infinite;
+    animation: pulse 0.7s infinite;
+  }
+
+  .cheat-pill {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(220, 38, 38, 0.9);
+    color: #ffffff;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: var(--radius-sm);
+    letter-spacing: 0.3px;
   }
 
   .violation-alert {
@@ -1018,6 +1270,13 @@
     border-radius: var(--radius-sm);
     font-size: 0.6875rem;
     text-align: center;
+    font-weight: 600;
+  }
+
+  .violation-alert.critical {
+    background: #fecaca;
+    border-color: #f87171;
+    color: #991b1b;
   }
 
   /* Main Question Container */

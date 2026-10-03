@@ -133,9 +133,27 @@ VITE_WS_URL=ws://localhost:4000/ws
 
 ---
 
-### Step 5: Launching Development Servers
+### Step 5: Python Live AI Proctoring Service Setup
 
-Run both servers concurrently in separate terminals:
+Navigate to the `ai-service/` directory and activate the virtual environment:
+
+```bash
+cd ai-service
+# The virtual environment is provisioned at ./venv
+source venv/bin/activate
+
+# (Optional) Retrain or calibrate the cheat classification model
+python train_model.py
+
+# Start the AI Proctoring FastAPI microservice
+uvicorn main:app --host 0.0.0.0 --port 5001 --reload
+```
+
+---
+
+### Step 6: Launching Development Servers
+
+Run all three services concurrently:
 
 **Terminal 1 — Backend API & WebSocket Server:**
 ```bash
@@ -149,6 +167,14 @@ npm run dev
 cd frontend
 npm run dev
 # Running on http://localhost:5173
+```
+
+**Terminal 3 — Python Live AI Proctoring Microservice:**
+```bash
+cd ai-service
+source venv/bin/activate
+uvicorn main:app --host 0.0.0.0 --port 5001
+# Running on http://localhost:5001
 ```
 
 Now open `http://localhost:5173` in your browser.
