@@ -1,128 +1,151 @@
 import os
-import cv2
-import numpy as np
+import math
+import logging
 from typing import List, Dict, Any, Tuple, Optional
+import numpy as np
+import cv2
 
-CASCADE_DIR_CANDIDATES = [
-    "/usr/share/opencv4/haarcascades",
-    "/usr/share/opencv/haarcascades",
-    "/usr/local/share/opencv4/haarcascades",
-    "/usr/local/share/opencv/haarcascades",
-    getattr(cv2, "data", None) and getattr(cv2.data, "haarcascades", None),
-]
-
-def find_cascade_path(filename: str) -> str:
-    for candidate in CASCADE_DIR_CANDIDATES:
-        if candidate and os.path.exists(candidate):
-            full_path = os.path.join(candidate, filename)
-            if os.path.exists(full_path):
-                return full_path
-    raise FileNotFoundError(f"Cascade classifier file '{filename}' not found in system paths.")
+logger = logging.getLogger("proctora_ai")
 
 class FaceDetector:
-    def __init__(self):
-        frontal_path = find_cascade_path("haarcascade_frontalface_default.xml")
-        alt_path = find_cascade_path("haarcascade_frontalface_alt2.xml")
-        profile_path = find_cascade_path("haarcascade_profileface.xml")
-        eye_path = find_cascade_path("haarcascade_eye.xml")
+    """
+    State-of-the-art YOLOv8 Pose / Face Detector.
+    Detects candidates, faces, and 17 COCO body/facial keypoints
+    (Nose, Left Eye, Right Eye, Left Ear, Right Ear, Shoulders, etc.)
+    """
 
-        self.frontal_cascade = cv2.CascadeClassifier(frontal_path)
-        self.alt_cascade = cv2.CascadeClassifier(alt_path)
-        self.profile_cascade = cv2.CascadeClassifier(profile_path)
-        self.eye_cascade = cv2.CascadeClassifier(eye_path)
+    def __init__(self, model_name: str = "yolov8n-pose.pt"):
+        self.model = None
+        self.model_loaded = False
+        models_dir = os.path.join(os.path.dirname(__file__), "models")
+        os.makedirs(models_dir, exist_ok=True)
+        local_model_path = os.path.join(models_dir, model_name)
 
-    def detect_faces(self, gray_frame: np.ndarray) -> List[Dict[str, Any]]:
+        target_model = local_model_path if os.path.exists(local_model_path) else model_name
+
+        try:
+            from ultralytics import YOLO
+            self.model = YOLO(target_model)
+            self.model_loaded = True
+            logger.info(f"Loaded YOLOv8 Pose model successfully from {target_model}")
+        except Exception as e:
+            logger.warning(f"Ultralytics YOLO not yet loaded ({e}). Standby mode enabled.")
+
+    def detect_faces(self, frame: np.ndarray) -> List[Dict[str, Any]]:
         """
-        Detects all faces in a grayscale frame.
-        Supports both frontal and profile detection with duplicate suppression.
+        Detects all candidate faces and their facial/body keypoints in the frame.
+        Returns a list of dicts with bounding box [x, y, w, h], keypoints, and confidence.
         """
-        h, w = gray_frame.shape[:2]
-        min_face_size = (int(w * 0.1), int(h * 0.1))
+        if frame is None or frame.size == 0:
+            return []
 
-        # 1. Frontal faces
-        frontal_rects = self.alt_cascade.detectMultiScale(
-            gray_frame,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=min_face_size
-        )
-        if len(frontal_rects) == 0:
-            frontal_rects = self.frontal_cascade.detectMultiScale(
-                gray_frame,
-                scaleFactor=1.1,
-                minNeighbors=4,
-                minSize=min_face_size
-            )
+        # Convert grayscale to BGR if necessary for YOLOv8
+        if len(frame.shape) == 2:
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        else:
+            frame_bgr = frame
 
-        # 2. Profile faces (turned left or right)
-        profile_rects = self.profile_cascade.detectMultiScale(
-            gray_frame,
-            scaleFactor=1.15,
-            minNeighbors=4,
-            minSize=min_face_size
-        )
-        # Also check flipped for opposite profile
-        gray_flipped = cv2.flip(gray_frame, 1)
-        flipped_profile_rects = self.profile_cascade.detectMultiScale(
-            gray_flipped,
-            scaleFactor=1.15,
-            minNeighbors=4,
-            minSize=min_face_size
-        )
-        reconstructed_flipped = []
-        for (rx, ry, rw, rh) in flipped_profile_rects:
-            reconstructed_flipped.append((w - (rx + rw), ry, rw, rh))
+        frame_h, frame_w = frame_bgr.shape[:2]
 
-        raw_faces: List[Tuple[int, int, int, int, str]] = []
-        for (x, y, fw, fh) in frontal_rects:
-            raw_faces.append((int(x), int(y), int(fw), int(fh), "frontal"))
-        for (x, y, fw, fh) in profile_rects:
-            raw_faces.append((int(x), int(y), int(fw), int(fh), "profile"))
-        for (x, y, fw, fh) in reconstructed_flipped:
-            raw_faces.append((int(x), int(y), int(fw), int(fh), "profile"))
+        if self.model is None or not self.model_loaded:
+            # Fallback if model is initializing
+            try:
+                from ultralytics import YOLO
+                models_dir = os.path.join(os.path.dirname(__file__), "models")
+                local_path = os.path.join(models_dir, "yolov8n-pose.pt")
+                self.model = YOLO(local_path if os.path.exists(local_path) else "yolov8n-pose.pt")
+                self.model_loaded = True
+            except Exception:
+                return []
 
-        # Non-maximum / overlap suppression
-        merged_faces: List[Dict[str, Any]] = []
-        for (x, y, fw, fh, ftype) in raw_faces:
-            is_overlap = False
-            for existing in merged_faces:
-                ex, ey, ew, eh = existing["x"], existing["y"], existing["w"], existing["h"]
-                # Compute IoU / overlap
-                ix = max(x, ex)
-                iy = max(y, ey)
-                iw = min(x + fw, ex + ew) - ix
-                ih = min(y + fh, ey + eh) - iy
-                if iw > 0 and ih > 0:
-                    intersection = iw * ih
-                    union = (fw * fh) + (ew * eh) - intersection
-                    if (intersection / union) > 0.35:
-                        is_overlap = True
-                        if existing["type"] == "profile" and ftype == "frontal":
-                            existing["type"] = "frontal"
-                        break
-            if not is_overlap:
-                merged_faces.append({
-                    "x": x,
-                    "y": y,
-                    "w": fw,
-                    "h": fh,
-                    "type": ftype
+        try:
+            results = self.model(frame_bgr, verbose=False, conf=0.35)
+        except Exception as e:
+            logger.error(f"YOLOv8 inference error: {e}")
+            return []
+
+        faces = []
+        for result in results:
+            if result.boxes is None or len(result.boxes) == 0:
+                continue
+
+            boxes = result.boxes
+            keypoints_data = result.keypoints.data.cpu().numpy() if result.keypoints is not None else None
+
+            for i in range(len(boxes)):
+                box = boxes[i]
+                cls_id = int(box.cls[0])
+                if cls_id != 0:  # Class 0 is person in COCO
+                    continue
+
+                conf = float(box.conf[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+
+                person_w = x2 - x1
+                person_h = y2 - y1
+
+                # Extract keypoints for this person
+                kpts = None
+                head_x, head_y, head_w, head_h = x1, y1, person_w, int(person_h * 0.35)
+
+                if keypoints_data is not None and i < len(keypoints_data):
+                    kpts = keypoints_data[i] # 17 x 3 (x, y, conf)
+                    # 0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear
+                    head_points = []
+                    for idx in range(5):
+                        kx, ky, kconf = kpts[idx]
+                        if kconf > 0.25:
+                            head_points.append((kx, ky))
+
+                    if len(head_points) >= 2:
+                        xs = [p[0] for p in head_points]
+                        ys = [p[1] for p in head_points]
+                        min_x, max_x = min(xs), max(xs)
+                        min_y, max_y = min(ys), max(ys)
+
+                        pad_x = max(20, int((max_x - min_x) * 0.5))
+                        pad_y = max(25, int((max_y - min_y) * 0.6))
+
+                        head_x = max(0, int(min_x - pad_x))
+                        head_y = max(0, int(min_y - pad_y))
+                        head_w = min(frame_w - head_x, int((max_x - min_x) + (2 * pad_x)))
+                        head_h = min(frame_h - head_y, int((max_y - min_y) + (2 * pad_y)))
+
+                # Determine if face is frontal or turned profile based on ear/eye visibility
+                face_type = "frontal"
+                if kpts is not None:
+                    left_ear_conf = float(kpts[3][2])
+                    right_ear_conf = float(kpts[4][2])
+                    left_eye_conf = float(kpts[1][2])
+                    right_eye_conf = float(kpts[2][2])
+
+                    if (left_ear_conf > 0.5 and right_eye_conf < 0.2) or (right_ear_conf > 0.5 and left_eye_conf < 0.2):
+                        face_type = "profile"
+
+                faces.append({
+                    "x": int(head_x),
+                    "y": int(head_y),
+                    "w": int(head_w),
+                    "h": int(head_h),
+                    "confidence": round(conf, 3),
+                    "type": face_type,
+                    "keypoints": kpts.tolist() if kpts is not None else None,
+                    "person_box": [x1, y1, x2, y2]
                 })
 
-        # Sort largest face first
-        merged_faces.sort(key=lambda f: f["w"] * f["h"], reverse=True)
-        return merged_faces
+        return faces
 
-    def detect_eyes(self, gray_face: np.ndarray) -> List[Tuple[int, int, int, int]]:
+    def detect_eyes(self, face_roi: np.ndarray) -> List[Tuple[int, int, int, int]]:
         """
-        Detects eyes within the upper 60% of the face bounding box.
+        Helper returning eye bounding regions.
         """
-        fh, fw = gray_face.shape[:2]
-        upper_half = gray_face[0:int(fh * 0.65), :]
-        eyes = self.eye_cascade.detectMultiScale(
-            upper_half,
-            scaleFactor=1.1,
-            minNeighbors=3,
-            minSize=(int(fw * 0.12), int(fh * 0.12))
-        )
-        return [(int(ex), int(ey), int(ew), int(eh)) for (ex, ey, ew, eh) in eyes]
+        if face_roi is None or face_roi.size == 0:
+            return []
+        h, w = face_roi.shape[:2]
+        # Return estimated left and right eye regions
+        eye_y = int(h * 0.3)
+        eye_h = int(h * 0.2)
+        eye_w = int(w * 0.25)
+        left_eye = (int(w * 0.15), eye_y, eye_w, eye_h)
+        right_eye = (int(w * 0.60), eye_y, eye_w, eye_h)
+        return [left_eye, right_eye]

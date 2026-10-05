@@ -1,4 +1,4 @@
-#!/home/harshith/dev/Proctora/ai-service/venv/bin/python3
+#!/home/adarsh/Documents/it303/Proctora/ai-service/venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

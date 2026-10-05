@@ -9,7 +9,7 @@ alias deactivate 'test $?_OLD_VIRTUAL_PATH != 0 && setenv PATH "$_OLD_VIRTUAL_PA
 # Unset irrelevant variables.
 deactivate nondestructive
 
-setenv VIRTUAL_ENV /home/harshith/dev/Proctora/ai-service/venv
+setenv VIRTUAL_ENV /home/adarsh/Documents/it303/Proctora/ai-service/venv
 
 set _OLD_VIRTUAL_PATH="$PATH"
 setenv PATH "$VIRTUAL_ENV/"bin":$PATH"
