@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import PageLoader from './components/layout/PageLoader.svelte';
   import ToastContainer from './components/layout/ToastContainer.svelte';
+  import LandingPage from './pages/LandingPage.svelte';
   import LoginPage from './pages/LoginPage.svelte';
   import RegisterPage from './pages/RegisterPage.svelte';
   import TwoFactorSetupPage from './pages/TwoFactorSetupPage.svelte';
@@ -15,6 +16,7 @@
   import AdminMonitorPage from './pages/AdminMonitorPage.svelte';
 
   const routes = {
+    '/': LandingPage,
     '/login': LoginPage,
     '/register': RegisterPage,
     '/2fa-setup': TwoFactorSetupPage,
@@ -30,9 +32,6 @@
 
   onMount(() => {
     setTimeout(() => appStore.setPageLoading(false), 200);
-    if (window.location.pathname === '/' || window.location.pathname === '') {
-      replace('/login');
-    }
   });
 </script>
 
