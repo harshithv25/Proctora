@@ -1,0 +1,32 @@
+{
+  "model_type": "YOLOv8-Pose",
+  "architecture": "yolov8n-pose",
+  "num_classes": 1,
+  "class_name": "person",
+  "keypoints": [
+    "nose",
+    "left_eye",
+    "right_eye",
+    "left_ear",
+    "right_ear",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle"
+  ],
+  "input_shape": [1, 3, 640, 640],
+  "confidence_threshold": 0.35,
+  "head_pose_yaw_threshold_deg": 22.0,
+  "head_pose_pitch_threshold_deg": 18.0,
+  "centering_max_distance": 0.35,
+  "proctoring_cheat_threshold": 0.65,
+  "created_at": "2026-10-05T16:46:00Z"
+}

@@ -18,10 +18,10 @@ test/
 │   │   ├── integrityMonitoring.test.ts    # Cheating score thresholds (0.65), focus infractions, telemetry
 │   │   ├── evaluationExport.test.ts       # MCQ single choice, multi-correct strict grading, code telemetry
 │   │   └── middleware.test.ts             # Custom AppError classes, RBAC guards, envelope serialization
-│   ├── ai-service/                        # AI Proctoring Engine Microservice Unit Tests
-│   │   ├── test_face_detector.py          # Bounding box geometry, duplicate suppression (IoU), noise filter
-│   │   ├── test_pose_estimator.py         # Head pose (Yaw/Pitch/Roll), centering bounds, gaze deviation
-│   │   ├── test_classifier.py             # 6D feature vector, cheat classification labels, probability bounds
+│   ├── ai-service/                        # AI Proctoring Engine Microservice (YOLOv8 Pose) Unit Tests
+│   │   ├── test_face_detector.py          # YOLOv8 17 COCO keypoint detection, box geometry, NMS suppression
+│   │   ├── test_pose_estimator.py         # 3D Head pose (Yaw/Pitch/Roll) from keypoints, centering, gaze
+│   │   ├── test_classifier.py             # Feature vectors, cheat classification labels, probability bounds
 │   │   └── test_api_endpoints.py          # /health, /verify-face, /analyze-frame request/response contracts
 │   └── frontend/                          # Frontend Client Layer Unit Tests
 │       ├── router.test.ts                 # Dynamic parameterized routes, wildcard fallback, query cleanup
@@ -63,16 +63,13 @@ NODE_PATH=./backend/node_modules ./backend/node_modules/.bin/tsx --test test/uni
 NODE_PATH=./backend/node_modules ./backend/node_modules/.bin/tsx --test test/unit/backend/middleware.test.ts
 ```
 
-#### AI Service Unit Tests:
+#### AI Service Unit Tests (YOLOv8 Pose Engine):
 ```bash
-# Run all AI service unit tests
-python3 -m unittest discover -s test/unit/ai-service -p "test_*.py"
-
-# Or run specific AI component unit tests individually:
-python3 -m unittest test/unit/ai-service/test_face_detector.py
-python3 -m unittest test/unit/ai-service/test_pose_estimator.py
-python3 -m unittest test/unit/ai-service/test_classifier.py
-python3 -m unittest test/unit/ai-service/test_api_endpoints.py
+# Run all AI service unit tests individually:
+python3 test/unit/ai-service/test_face_detector.py
+python3 test/unit/ai-service/test_pose_estimator.py
+python3 test/unit/ai-service/test_classifier.py
+python3 test/unit/ai-service/test_api_endpoints.py
 ```
 
 #### Frontend Unit Tests:

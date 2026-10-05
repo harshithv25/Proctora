@@ -38,7 +38,10 @@ echo -e "${GREEN}✔ Backend unit tests completed successfully.${NC}"
 
 # 2. AI Service Unit Tests
 echo -e "\n${BOLD}${YELLOW}[2/4] Running AI Service Unit Tests (Individual Modules)...${NC}"
-$PYTHON_BIN -m unittest discover -s test/unit/ai-service -p "test_*.py"
+$PYTHON_BIN test/unit/ai-service/test_face_detector.py
+$PYTHON_BIN test/unit/ai-service/test_pose_estimator.py
+$PYTHON_BIN test/unit/ai-service/test_classifier.py
+$PYTHON_BIN test/unit/ai-service/test_api_endpoints.py
 echo -e "${GREEN}✔ AI Service unit tests completed successfully.${NC}"
 
 # 3. Frontend Unit Tests

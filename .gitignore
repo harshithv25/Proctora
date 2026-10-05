@@ -30,3 +30,5 @@ Thumbs.db
 *.njsproj
 *.sln
 *.swp
+
+ai-service/venv/

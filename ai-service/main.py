@@ -7,7 +7,6 @@ from typing import Optional, Dict, Any, List
 
 import cv2
 import numpy as np
-import joblib
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -21,8 +20,8 @@ logger = logging.getLogger("proctora_ai")
 
 app = FastAPI(
     title="Proctora AI Live Proctoring Engine",
-    description="Real-time face detection, head pose estimation, and suspicious behavioral classification for online examinations.",
-    version="1.0.0"
+    description="Real-time YOLOv8 Pose-based candidate detection, 3D head pose estimation, and suspicious behavioral classification for online examinations.",
+    version="2.0.0"
 )
 
 app.add_middleware(
@@ -33,20 +32,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize CV & ML Engines
-detector = FaceDetector()
+# Initialize YOLOv8 Pose Detector & Estimator Engines
+detector = FaceDetector(model_name="yolov8n-pose.pt")
 pose_estimator = PoseEstimator()
-
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "cheat_classifier.joblib")
-classifier = None
-if os.path.exists(MODEL_PATH):
-    try:
-        classifier = joblib.load(MODEL_PATH)
-        logger.info(f"Loaded ML cheat classifier from {MODEL_PATH}")
-    except Exception as e:
-        logger.error(f"Failed to load classifier: {e}")
-else:
-    logger.warning("Classifier file not found. Ensure train_model.py has been run.")
 
 CLASS_NAMES = ["NORMAL", "NO_FACE", "MULTIPLE_FACES", "LOOKING_AWAY"]
 
@@ -77,8 +65,8 @@ def decode_base64_image(image_b64: str) -> np.ndarray:
 def health_check():
     return {
         "status": "healthy",
-        "service": "Proctora AI Live Proctoring Engine",
-        "model_loaded": classifier is not None,
+        "service": "Proctora AI Live Proctoring Engine (YOLOv8 Pose)",
+        "model_loaded": detector.model_loaded,
         "detector_ready": True,
         "timestamp": time.time()
     }
@@ -86,11 +74,10 @@ def health_check():
 @app.post("/verify-face")
 def verify_face(req: VerifyFaceRequest):
     """
-    Pre-exam system check: validates candidate face is present, unique, and centered.
+    Pre-exam system check: validates candidate face is present, unique, and centered using YOLOv8 Pose.
     """
     img = decode_base64_image(req.image)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = detector.detect_faces(gray)
+    faces = detector.detect_faces(img)
     frame_h, frame_w = img.shape[:2]
 
     if len(faces) == 0:
@@ -113,10 +100,9 @@ def verify_face(req: VerifyFaceRequest):
             "boundingBoxes": faces
         }
 
-    # Exactly 1 face
+    # Exactly 1 face detected
     face = faces[0]
-    eyes = detector.detect_eyes(gray[face["y"]:face["y"]+face["h"], face["x"]:face["x"]+face["w"]])
-    metrics = pose_estimator.estimate_pose(face, eyes, (frame_h, frame_w))
+    metrics = pose_estimator.estimate_pose(face, None, (frame_h, frame_w))
 
     if not metrics["is_centered"]:
         return {
@@ -154,22 +140,20 @@ def verify_face(req: VerifyFaceRequest):
 @app.post("/analyze-frame")
 def analyze_frame(req: FrameAnalysisRequest):
     """
-    Analyzes an in-exam candidate video frame for suspicious activity:
-    - Candidate moved out of frame
-    - Multiple people in frame
-    - Looking away / gaze & head pose deviation
+    Analyzes an in-exam candidate video frame for suspicious activity using YOLOv8 Pose:
+    - Candidate moved out of frame (NO_FACE)
+    - Multiple people in frame (MULTIPLE_FACES)
+    - Looking away / gaze & head pose deviation (LOOKING_AWAY)
     """
     img = decode_base64_image(req.image)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     frame_h, frame_w = img.shape[:2]
 
-    faces = detector.detect_faces(gray)
+    faces = detector.detect_faces(img)
     num_faces = len(faces)
 
     persistence = max(0.5, float(req.persistenceSec or 1.0))
 
     if num_faces == 0:
-        feature_vector = np.array([[0, 0.0, 0.0, 0.0, 1.0, 0, 0.0, persistence]], dtype=np.float32)
         metrics = {
             "num_faces": 0,
             "yaw": 0.0,
@@ -186,20 +170,7 @@ def analyze_frame(req: FrameAnalysisRequest):
         cheat_prob = 0.92
     else:
         primary_face = faces[0]
-        face_roi = gray[primary_face["y"]:primary_face["y"]+primary_face["h"], primary_face["x"]:primary_face["x"]+primary_face["w"]]
-        eyes = detector.detect_eyes(face_roi)
-        metrics = pose_estimator.estimate_pose(primary_face, eyes, (frame_h, frame_w))
-
-        feature_vector = np.array([[
-            num_faces,
-            abs(metrics["yaw"]),
-            abs(metrics["pitch"]),
-            abs(metrics["roll"]),
-            metrics["center_distance"],
-            metrics["eyes_count"],
-            metrics["face_area_ratio"],
-            persistence
-        ]], dtype=np.float32)
+        metrics = pose_estimator.estimate_pose(primary_face, None, (frame_h, frame_w))
 
         if num_faces > 1:
             status = "multiple_faces"
@@ -210,29 +181,22 @@ def analyze_frame(req: FrameAnalysisRequest):
             direction = "right" if metrics["yaw"] > 0 else "left"
             details = f"Candidate turned head to the {direction} (Yaw: {metrics['yaw']}°)"
             cheat_prob = 0.85
-        elif metrics["pitch"] < -18.0:
+        elif metrics["pitch"] > 18.0:
             status = "looking_away"
             details = f"Candidate looking down at desk or notes (Pitch: {metrics['pitch']}°)"
             cheat_prob = 0.82
-        elif metrics["pitch"] > 18.0:
+        elif metrics["pitch"] < -18.0:
             status = "looking_away"
             details = f"Candidate looking up away from monitor (Pitch: {metrics['pitch']}°)"
             cheat_prob = 0.78
+        elif not metrics["is_centered"]:
+            status = "looking_away"
+            details = "Candidate shifted away from center of screen view."
+            cheat_prob = 0.70
         else:
             status = "normal"
             details = "Candidate focused on examination"
             cheat_prob = 0.05
-
-    # Refine probability through trained ML classifier
-    if classifier is not None:
-        try:
-            probas = classifier.predict_proba(feature_vector)[0]
-            # Normal class is index 0; anomaly probability is 1.0 - probas[0]
-            ml_cheat_prob = float(1.0 - probas[0])
-            # Calibrate ensemble score
-            cheat_prob = float(np.clip(0.6 * cheat_prob + 0.4 * ml_cheat_prob, 0.0, 1.0))
-        except Exception as e:
-            logger.debug(f"Classifier prediction fallback: {e}")
 
     flagged = cheat_prob >= 0.65
 
