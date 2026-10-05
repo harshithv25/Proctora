@@ -19,7 +19,11 @@ cd "$ROOT_DIR"
 
 export NODE_PATH="$ROOT_DIR/backend/node_modules:$ROOT_DIR/frontend/node_modules"
 TSX_BIN="$ROOT_DIR/backend/node_modules/.bin/tsx"
-PYTHON_BIN="python3"
+if [ -f "$ROOT_DIR/ai-service/venv/bin/python" ]; then
+  PYTHON_BIN="$ROOT_DIR/ai-service/venv/bin/python"
+else
+  PYTHON_BIN="python3"
+fi
 
 echo -e "${BOLD}${BLUE}====================================================================${NC}"
 echo -e "${BOLD}${CYAN}                PROCTORA TEST SUITE EXECUTION                       ${NC}"
