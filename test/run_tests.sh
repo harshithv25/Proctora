@@ -47,6 +47,7 @@ echo -e "${GREEN}✔ AI Service unit tests completed successfully.${NC}"
 # 3. Frontend Unit Tests
 echo -e "\n${BOLD}${YELLOW}[3/4] Running Frontend Unit Tests (Individual Modules)...${NC}"
 $TSX_BIN --test \
+  test/unit/frontend/landing_page.test.ts \
   test/unit/frontend/router.test.ts \
   test/unit/frontend/api_client.test.ts \
   test/unit/frontend/auth_store.test.ts \

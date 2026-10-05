@@ -24,6 +24,7 @@ test/
 │   │   ├── test_classifier.py             # Feature vectors, cheat classification labels, probability bounds
 │   │   └── test_api_endpoints.py          # /health, /verify-face, /analyze-frame request/response contracts
 │   └── frontend/                          # Frontend Client Layer Unit Tests
+│       ├── landing_page.test.ts           # Project title theme, course metadata, author/instructor credits, copyright
 │       ├── router.test.ts                 # Dynamic parameterized routes, wildcard fallback, query cleanup
 │       ├── api_client.test.ts             # Axios interceptors, CSRF/Auth token propagation, error extraction
 │       ├── auth_store.test.ts             # Client session states, role permissions, 2FA challenge flow

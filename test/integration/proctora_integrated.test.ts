@@ -1,6 +1,8 @@
 import test, { describe, it } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { evaluateResponses, QuestionItem } from '../../backend/src/modules/evaluationExport/grading';
 
 describe('Integrated System Test: Proctora Microservices & Services Pipeline', () => {
@@ -13,10 +15,40 @@ describe('Integrated System Test: Proctora Microservices & Services Pipeline', (
   let finalEvaluation: any;
 
   // =========================================================================
-  // STEP 1: Candidate Authentication & 2FA Token Verification Flow
+  // STEP 1: Landing Page, Brand Presentation & Academic Information
+  // (Frontend Public Interface)
+  // =========================================================================
+  it('STEP 1 [Frontend Landing]: Candidate loads landing page, verifies IT303 course details, authors, instructor, and copyright', () => {
+    const landingPagePath = path.resolve(__dirname, '../../frontend/src/pages/LandingPage.svelte');
+    const source = fs.readFileSync(landingPagePath, 'utf8');
+
+    // 1. Brand logo and title
+    assert.match(source, /proctora/);
+    assert.match(source, /main-shield/);
+
+    // 2. Course designation under logo
+    assert.match(source, /This project is for the course IT303 : Software Engineering/);
+
+    // 3. Authors and roll numbers
+    assert.match(source, /Adarsh Bellamane/);
+    assert.match(source, /241IT004/);
+    assert.match(source, /Harshith Vellapha/);
+    assert.match(source, /241IT033/);
+    assert.match(source, /Rushi Patel/);
+    assert.match(source, /241IT065/);
+
+    // 4. Course Instructor
+    assert.match(source, /Course Instructor\s*:\s*<\/span>\s*<span class="instructor-name">Jaidhar C\.D\./);
+
+    // 5. Copyright symbol and footer
+    assert.match(source, /(&copy;|©)\s*2026 Proctora/);
+  });
+
+  // =========================================================================
+  // STEP 2: Candidate Authentication & 2FA Token Verification Flow
   // (Frontend Client Layer <-> Backend Auth Microservice)
   // =========================================================================
-  it('STEP 1 [Auth Service]: Register candidate, verify password hash, and establish JWT session', () => {
+  it('STEP 2 [Auth Service]: Register candidate, verify password hash, and establish JWT session', () => {
     const rawPassword = 'StudentSecret@2026';
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = crypto.pbkdf2Sync(rawPassword, salt, 1000, 64, 'sha512').toString('hex');
@@ -46,10 +78,10 @@ describe('Integrated System Test: Proctora Microservices & Services Pipeline', (
   });
 
   // =========================================================================
-  // STEP 2: Exam Configuration & 9-Color Seating Plan Deconfliction
+  // STEP 3: Exam Configuration & 9-Color Seating Plan Deconfliction
   // (Faculty Admin Portal <-> Backend ExamConfig Service)
   // =========================================================================
-  it('STEP 2 [ExamConfig Service]: Provision exam and assign deconflicted question sets to candidate physical seat', () => {
+  it('STEP 3 [ExamConfig Service]: Provision exam and assign deconflicted question sets to candidate physical seat', () => {
     const questionBank: QuestionItem[] = [
       { id: 'q-mcq-1', type: 'mcq', content: 'HTTP status for Not Found is:', order: 0, metadata: { points: 2, correctAnswer: '404' } },
       { id: 'q-mcq-2', type: 'mcq', content: 'Which protocol is used for full-duplex communication in Proctora?', order: 1, metadata: { points: 2, correctAnswer: 'WebSocket' } },
@@ -86,15 +118,15 @@ describe('Integrated System Test: Proctora Microservices & Services Pipeline', (
   });
 
   // =========================================================================
-  // STEP 3: Pre-Flight Device Diagnostics & AI Camera Calibration
+  // STEP 4: Pre-Flight Device Diagnostics & YOLOv8 Pose Camera Calibration
   // (Frontend Client <-> AI Proctoring Microservice <-> Backend Delivery)
   // =========================================================================
-  it('STEP 3 [AI Proctoring Service]: Verify candidate presence and calibrate head pose before entry', () => {
+  it('STEP 4 [AI Proctoring Service]: Verify candidate presence and calibrate head pose using YOLOv8 Pose', () => {
     // 1. Device check
     const hardwareOk = true; // webcam and mic active
     assert.strictEqual(hardwareOk, true);
 
-    // 2. AI face verification logic
+    // 2. YOLOv8 Pose face verification logic
     const faceFound = true;
     const numFaces = 1;
     const yaw = 2.1;
@@ -117,10 +149,10 @@ describe('Integrated System Test: Proctora Microservices & Services Pipeline', (
   });
 
   // =========================================================================
-  // STEP 4: Live Exam Session, AI Behavior Evaluation & Telemetry Streaming
+  // STEP 5: Live Exam Session, AI Behavior Evaluation & Telemetry Streaming
   // (Frontend Telemetry Engine <-> AI Microservice <-> Backend Integrity Monitoring)
   // =========================================================================
-  it('STEP 4 [Integrity Monitoring & AI Engine]: Stream editor telemetry and detect gaze diversion event', () => {
+  it('STEP 5 [Integrity Monitoring & AI Engine]: Stream editor telemetry and detect gaze diversion event', () => {
     liveProctoringAlerts = [];
 
     // Frame 1: Candidate looking normal
@@ -158,10 +190,10 @@ describe('Integrated System Test: Proctora Microservices & Services Pipeline', (
   });
 
   // =========================================================================
-  // STEP 5: Exam Submission, Auto-Grading & Report Compilation
+  // STEP 6: Exam Submission, Auto-Grading & Report Compilation
   // (Frontend Submit -> Backend EvaluationExport Microservice)
   // =========================================================================
-  it('STEP 5 [Evaluation & Export Service]: Score candidate submission and compile complete evaluation breakdown', () => {
+  it('STEP 6 [Evaluation & Export Service]: Score candidate submission and compile complete evaluation breakdown', () => {
     const candidateAnswers = {
       'q-mcq-1': '404',        // Correct (+2 pts)
       'q-mcq-2': 'websocket',  // Correct case-insensitive (+2 pts)

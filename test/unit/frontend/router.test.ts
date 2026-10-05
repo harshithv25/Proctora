@@ -53,44 +53,69 @@ describe('Frontend Unit Tests: Client-Side Router Module', () => {
     return null;
   }
 
-  const dummyRoutes = {
-    '/': 'HomePage',
+  // Exact route table registered in frontend/src/App.svelte
+  const appRoutes = {
+    '/': 'LandingPage',
     '/login': 'LoginPage',
+    '/register': 'RegisterPage',
+    '/2fa-setup': 'TwoFactorSetupPage',
     '/dashboard': 'DashboardPage',
-    '/exam/:id': 'ExamPortalPage',
+    '/exams/:examId/device-check': 'DeviceCheckPage',
+    '/exams/:examId/portal': 'ExamPortalPage',
+    '/exams/:examId/submitted': 'ExamSubmittedPage',
+    '/admin/exams': 'AdminExamsPage',
     '/admin/exams/:examId/monitor': 'AdminMonitorPage',
     '*': 'NotFoundPage',
   };
 
-  it('should match direct static routes exactly', () => {
-    const match = matchRoute('/login', dummyRoutes);
+  it('should match root path "/" directly to LandingPage', () => {
+    const match = matchRoute('/', appRoutes);
     assert.ok(match);
-    assert.strictEqual(match.component, 'LoginPage');
+    assert.strictEqual(match.component, 'LandingPage');
     assert.deepStrictEqual(match.params, {});
   });
 
-  it('should extract dynamic route parameters for single parameter routes', () => {
-    const match = matchRoute('/exam/TEST-XYZ890', dummyRoutes);
-    assert.ok(match);
-    assert.strictEqual(match.component, 'ExamPortalPage');
-    assert.strictEqual(match.params.id, 'TEST-XYZ890');
+  it('should match direct static authentication routes ("/login", "/register")', () => {
+    const loginMatch = matchRoute('/login', appRoutes);
+    assert.ok(loginMatch);
+    assert.strictEqual(loginMatch.component, 'LoginPage');
+
+    const registerMatch = matchRoute('/register', appRoutes);
+    assert.ok(registerMatch);
+    assert.strictEqual(registerMatch.component, 'RegisterPage');
   });
 
-  it('should extract dynamic route parameters for nested routes', () => {
-    const match = matchRoute('/admin/exams/exam-12345/monitor', dummyRoutes);
+  it('should extract dynamic route parameters for exam delivery routes', () => {
+    const match = matchRoute('/exams/TEST-NITK101/portal', appRoutes);
+    assert.ok(match);
+    assert.strictEqual(match.component, 'ExamPortalPage');
+    assert.strictEqual(match.params.examId, 'TEST-NITK101');
+
+    const deviceMatch = matchRoute('/exams/exam-7788/device-check', appRoutes);
+    assert.ok(deviceMatch);
+    assert.strictEqual(deviceMatch.component, 'DeviceCheckPage');
+    assert.strictEqual(deviceMatch.params.examId, 'exam-7788');
+  });
+
+  it('should extract dynamic route parameters for administrative live monitor', () => {
+    const match = matchRoute('/admin/exams/exam-12345/monitor', appRoutes);
     assert.ok(match);
     assert.strictEqual(match.component, 'AdminMonitorPage');
     assert.strictEqual(match.params.examId, 'exam-12345');
   });
 
-  it('should strip query parameters and trailing slashes cleanly', () => {
-    const match = matchRoute('/dashboard/?tab=results&view=full', dummyRoutes);
-    assert.ok(match);
-    assert.strictEqual(match.component, 'DashboardPage');
+  it('should strip query parameters and trailing slashes cleanly on root and subroutes', () => {
+    const rootMatch = matchRoute('/?ref=portal&src=web', appRoutes);
+    assert.ok(rootMatch);
+    assert.strictEqual(rootMatch.component, 'LandingPage');
+
+    const dashMatch = matchRoute('/dashboard/?tab=results', appRoutes);
+    assert.ok(dashMatch);
+    assert.strictEqual(dashMatch.component, 'DashboardPage');
   });
 
   it('should fallback to wildcard route for unrecognized paths', () => {
-    const match = matchRoute('/non-existent/deep/route', dummyRoutes);
+    const match = matchRoute('/non-existent/deep/route', appRoutes);
     assert.ok(match);
     assert.strictEqual(match.component, 'NotFoundPage');
   });
