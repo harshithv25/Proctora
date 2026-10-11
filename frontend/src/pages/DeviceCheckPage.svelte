@@ -72,7 +72,8 @@
     if (!frameB64) return;
 
     try {
-      const res = await fetch('/ai-proctor/verify-face', {
+      const aiBase = import.meta.env.VITE_AI_URL || '/ai-proctor';
+      const res = await fetch(`${aiBase}/verify-face`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: frameB64 }),

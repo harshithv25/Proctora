@@ -15,6 +15,8 @@
     "db:validate": "npx prisma validate",
     "db:flush-users": "tsx src/scripts/flushNonAdminUsers.ts",
     "db:flush-exams": "tsx src/scripts/flushExams.ts",
+    "db:flush-logs": "tsx src/scripts/flushLogs.ts",
+    "db:create-super-admin": "tsx src/scripts/createSuperAdmin.ts",
     "db:reset-except-admin": "tsx src/scripts/resetDatabaseExceptAdmin.ts",
     "seed:oa": "tsx src/scripts/seedMorganStanleyOA.ts"
   },

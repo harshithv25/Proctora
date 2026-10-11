@@ -3,18 +3,18 @@ dotenv.config();
 import { prisma } from "../config/db";
 
 async function flushNonAdminUsers() {
-  console.log("Starting user flush: preserving all ADMIN accounts...");
+  console.log("Starting user flush: preserving all ADMIN and SUPER_ADMIN accounts...");
 
   // 1. Fetch non-admin user IDs
   const nonAdminUsers = await prisma.user.findMany({
     where: {
-      role: { not: "ADMIN" },
+      role: { notIn: ["ADMIN", "SUPER_ADMIN"] },
     },
     select: { id: true, email: true, rollNumber: true, role: true },
   });
 
   const ids = nonAdminUsers.map((u) => u.id);
-  console.log(`Found ${ids.length} non-admin user(s) to remove:`);
+  console.log(`Found ${ids.length} candidate user(s) to remove:`);
   for (const u of nonAdminUsers) {
     console.log(`  - [${u.role}] ${u.email} (Roll: ${u.rollNumber || "N/A"})`);
   }

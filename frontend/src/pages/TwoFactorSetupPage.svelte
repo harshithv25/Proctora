@@ -96,10 +96,7 @@
 
         <div class="actions">
           <Button variant="primary" fullWidth loading={authStore.isLoading} onclick={handleContinue}>
-            Done & Proceed
-          </Button>
-          <Button variant="ghost" fullWidth onclick={() => push('/dashboard')}>
-            Skip for now
+            Complete & Secure Account
           </Button>
         </div>
       {/if}

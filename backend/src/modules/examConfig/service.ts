@@ -1,5 +1,6 @@
 import { prisma } from "../../config/db";
 import { NotFoundError, ConflictError } from "../../lib/apiError";
+import { logEvent } from "../../lib/eventLogger";
 
 function generateTestId(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -133,7 +134,7 @@ export async function createExam(data: {
     ? new Date(data.endTime)
     : new Date(start.getTime() + durationMinutes * 60 * 1000);
 
-  return prisma.exam.create({
+  const exam = await prisma.exam.create({
     data: {
       title: data.title.trim(),
       testId,
@@ -147,6 +148,20 @@ export async function createExam(data: {
       createdBy: data.createdBy,
     },
   });
+
+  await logEvent({
+    eventType: "test_create",
+    userId: data.createdBy,
+    details: {
+      examId: exam.id,
+      testId: exam.testId,
+      title: exam.title,
+      duration: exam.duration,
+      maxStudents: exam.maxStudents,
+    },
+  });
+
+  return exam;
 }
 
 export async function updateExam(
@@ -183,7 +198,7 @@ export async function updateExam(
     ? new Date(data.endTime)
     : new Date(startTime.getTime() + duration * 60 * 1000);
 
-  return prisma.exam.update({
+  const updated = await prisma.exam.update({
     where: { id: examId },
     data: {
       ...(data.title ? { title: data.title.trim() } : {}),
@@ -197,6 +212,18 @@ export async function updateExam(
       ...(data.idleTimeoutSec ? { idleTimeoutSec: data.idleTimeoutSec } : {}),
     },
   });
+
+  await logEvent({
+    eventType: "test_edit",
+    details: {
+      examId,
+      testId: updated.testId,
+      title: updated.title,
+      updatedFields: Object.keys(data),
+    },
+  });
+
+  return updated;
 }
 
 export async function saveQuestions(
@@ -252,6 +279,16 @@ export async function saveQuestions(
       });
     }
   }
+
+  await logEvent({
+    eventType: "test_edit",
+    details: {
+      examId,
+      testId: exam.testId,
+      action: "save_questions",
+      questionCount: createdQuestions.length,
+    },
+  });
 
   return createdQuestions;
 }
@@ -360,6 +397,16 @@ export async function processSeatingCsv(
     },
   });
 
+  await logEvent({
+    eventType: "test_edit",
+    details: {
+      examId,
+      testId: exam.testId,
+      action: "upload_seating_plan",
+      studentCount: assignments.length,
+    },
+  });
+
   return {
     totalStudents: assignments.length,
     rows: grid.length,
@@ -385,5 +432,17 @@ export async function deleteExam(examId: string) {
   if (!exam) {
     throw new NotFoundError("Exam not found", "EXAM_NOT_FOUND");
   }
-  return prisma.exam.delete({ where: { id: examId } });
+  const deleted = await prisma.exam.delete({ where: { id: examId } });
+
+  await logEvent({
+    eventType: "test_delete",
+    details: {
+      examId,
+      testId: exam.testId,
+      title: exam.title,
+    },
+  });
+
+  return deleted;
 }
+

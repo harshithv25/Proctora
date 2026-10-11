@@ -21,6 +21,20 @@ async function main() {
   });
   console.log("✅ Admin created:", admin.email);
 
+  // 1b. Create Super Admin
+  const superAdminPasswordHash = await argon2.hash("SuperAdmin@12345");
+  const superAdmin = await prisma.user.upsert({
+    where: { email: "superadmin@proctora.edu" },
+    update: {},
+    create: {
+      name: "Root Super Administrator",
+      email: "superadmin@proctora.edu",
+      passwordHash: superAdminPasswordHash,
+      role: "SUPER_ADMIN",
+    },
+  });
+  console.log("✅ Super Admin created:", superAdmin.email);
+
   // 2. Create Candidate
   const studentPasswordHash = await argon2.hash("Student@12345");
   const student = await prisma.user.upsert({

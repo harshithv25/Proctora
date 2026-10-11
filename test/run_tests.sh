@@ -37,7 +37,8 @@ $TSX_BIN --test \
   test/unit/backend/examDelivery.test.ts \
   test/unit/backend/integrityMonitoring.test.ts \
   test/unit/backend/evaluationExport.test.ts \
-  test/unit/backend/middleware.test.ts
+  test/unit/backend/middleware.test.ts \
+  test/unit/backend/logs_and_security.test.ts
 echo -e "${GREEN}✔ Backend unit tests completed successfully.${NC}"
 
 # 2. AI Service Unit Tests

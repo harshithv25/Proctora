@@ -9,18 +9,18 @@ async function resetDatabaseExceptAdmin() {
 
   // 1. Identify non-admin accounts
   const nonAdminUsers = await prisma.user.findMany({
-    where: { role: { not: "ADMIN" } },
+    where: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } },
     select: { id: true, email: true, rollNumber: true, role: true },
   });
 
   const adminUsers = await prisma.user.findMany({
-    where: { role: "ADMIN" },
-    select: { id: true, email: true, name: true },
+    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+    select: { id: true, email: true, name: true, role: true },
   });
 
-  console.log(`Preserving ${adminUsers.length} Administrator account(s):`);
+  console.log(`Preserving ${adminUsers.length} Administrator & Super Admin account(s):`);
   for (const a of adminUsers) {
-    console.log(`  * [ADMIN] ${a.email} (${a.name})`);
+    console.log(`  * [${a.role}] ${a.email} (${a.name})`);
   }
 
   console.log(`\nFlushing ${nonAdminUsers.length} candidate user(s) and all test data...`);
@@ -54,13 +54,13 @@ async function resetDatabaseExceptAdmin() {
   console.log(`- Removed ${delSessions.count} user login sessions.`);
 
   const delUsers = await prisma.user.deleteMany({
-    where: { role: { not: "ADMIN" } },
+    where: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } },
   });
   console.log(`- Removed ${delUsers.count} non-admin user accounts.`);
 
   // 3. Reset admin security lockouts and failed attempts
   await prisma.user.updateMany({
-    where: { role: "ADMIN" },
+    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
     data: {
       isLocked: false,
       failedLoginAttempts: 0,

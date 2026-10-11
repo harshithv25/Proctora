@@ -189,6 +189,7 @@ When initialized with `npm run db:seed` and `npm run seed:oa`, the system provis
 
 | Role | Email | Password | Roll Number | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
+| **Super Administrator** | `superadmin@proctora.edu` | `SuperAdmin@12345` | *N/A* | Abstracted System Audit Logs Portal (`/super-admin`), Global Event Stream |
 | **Administrator** | `admin@proctora.edu` | `Admin@12345` | *N/A* | Exam Studio, Classroom Matrix, Live Invigilation & Leaderboard |
 | **Candidate** | `student@proctora.edu` | `Student@12345` | `21CS001` | Candidate Minimalist Portal, Exam Taking, Monaco Code Editor |
 
@@ -198,6 +199,7 @@ When initialized with `npm run db:seed` and `npm run seed:oa`, the system provis
 - **Candidate Test ID**: `TEST-MS2026`
 - **Direct Candidate Portal URL**: `http://localhost:5173/exams/TEST-MS2026/portal`
 - **Direct Admin Invigilation URL**: `http://localhost:5173/admin/exams/TEST-MS2026/monitor`
+- **Direct Super Admin Portal URL**: `http://localhost:5173/super-admin`
 - **Duration**: 90 Minutes (Total Score: 25 Points)
 - **Question Structure**:
   1. `Q1` (MCQ Single): Worst-case time complexity of balanced BST (`O(log N)`) — 1 pt
@@ -220,8 +222,10 @@ All maintenance operations can be run using pre-configured npm scripts. See [`DA
 
 | Command | Working Directory | Description |
 | :--- | :--- | :--- |
+| `npm run db:create-super-admin` | `backend/` | Provisions/refreshes the Super Administrator account (`SUPER_ADMIN` role). |
+| `npm run db:flush-logs` | `backend/` | Flushes all records from the dedicated `logs` table (supports optional retention days: `npm run db:flush-logs 30`). |
 | `npm run seed:oa` | `backend/` | Cleans up previous responses and seeds the complete 10-question Morgan Stanley OA. |
-| `npm run db:reset-except-admin` | `backend/` | Clears all responses, seating, questions, and students, keeping only `admin@proctora.edu`. |
+| `npm run db:reset-except-admin` | `backend/` | Clears all responses, seating, questions, and students, preserving `ADMIN` and `SUPER_ADMIN` accounts. |
 | `npm run db:flush-exams` | `backend/` | Removes all exams and responses while preserving all registered users. |
 | `npm run db:flush-users` | `backend/` | Deletes all candidate accounts and sessions while preserving administrator accounts. |
 | `npm run db:push` | `backend/` | Pushes Prisma schema changes directly to the PostgreSQL database without migrations. |
@@ -231,23 +235,40 @@ All maintenance operations can be run using pre-configured npm scripts. See [`DA
 
 ## 6. Architecture & Module Specifications
 
-Proctora is partitioned into 5 decoupled backend modules located in [`backend/src/modules/`](file:///home/harshith/dev/Proctora/backend/src/modules):
+Proctora is partitioned into 6 decoupled backend modules located in [`backend/src/modules/`](file:///home/harshith/dev/Proctora/backend/src/modules):
 
 ```
 backend/src/modules/
-├── auth/                 # Identity, sessions, Argon2 hashing, TOTP 2FA, RBAC
+├── auth/                 # Identity, Argon2 hashing, mandatory 2FA, 2FA password recovery, RBAC
 ├── examConfig/           # Exam authoring, questions, CSV seating matrices, accommodations
 ├── examDelivery/         # Time-gating enforcement, candidate portal, device checks, fullscreen lock
 ├── integrityMonitoring/  # Webcam frame flags, tab blurs, focus logs, Monaco telemetry
-└── evaluationExport/     # Autosave drafts, strict auto-grading, admin live feed, leaderboard, CSV export
+├── evaluationExport/     # Autosave drafts, strict auto-grading, admin live feed, leaderboard, CSV export
+└── superAdmin/           # Centralized audit logging, global event query, JSON inspector, log export
 ```
 
 ### Module 1: Authentication & Authorization (`auth`)
 - **Password Security**: Uses **Argon2id** algorithm with high memory-cost parameters.
+- **Real-Time Password Strength Detection**:
+  - Integrated directly below password fields in registration and recovery flows.
+  - Three fundamental criteria:
+    1. At least one special character (`/[^A-Za-z0-9]/`)
+    2. At least one number (`/[0-9]/`)
+    3. Mixed casing (`/[a-z]/` and `/[A-Z]/`)
+  - Dynamic state colors:
+    - **Red**: None of the rules satisfied (0 / 3)
+    - **Orange**: At least one rule satisfied (1 / 3 or 2 / 3)
+    - **Green**: All rules satisfied (3 / 3)
+- **Mandatory 2FA Registration**:
+  - Upon user sign-up, session tokens are issued and the candidate is immediately forwarded to `/2fa-setup`.
+  - Non-optional setup: Skip buttons are removed; account activation requires completed 2FA setup.
+- **2FA-Reused Password Recovery**:
+  - Users who forget their password access `/forgot-password`.
+  - Authentication requires supplying registered email and verifying their 6-digit TOTP authenticator PIN via `POST /api/auth/forgot-password/verify-2fa`.
+  - Upon successful PIN validation, a signed 15-minute reset JWT is issued, redirecting to `/reset-password` with live password strength evaluation.
 - **Tokens**: Short-lived JWT Access Tokens (15 min) paired with HTTP-only Refresh Token Cookies (7 days) stored in the `Session` database table.
-- **Multi-Factor Authentication (TOTP)**: Built with `otplib`. Generates standard `otpauth://` QR-compatible secrets. Required for high-privilege operations.
 - **Brute-Force Lockout**: Automatically locks an account after 5 consecutive failed login attempts (`isLocked: true`).
-- **Role-Based Access Control (RBAC)**: Enforced via `requireRole("ADMIN")` or `requireRole("CANDIDATE")` route middleware.
+- **Role-Based Access Control (RBAC)**: Enforced via `requireRole("SUPER_ADMIN", "ADMIN")`, `requireRole("ADMIN")`, or `requireRole("CANDIDATE")`.
 
 ### Module 2: Exam Configuration Studio & Seating Planner (`examConfig`)
 - **Exam Management**: Creation, updating, and deletion of exams with start time, end time, duration limit, and idle timeouts.
@@ -293,6 +314,17 @@ backend/src/modules/
   - Interactive modal displaying student answers side-by-side with expected solutions.
   - Color-coded validation pills (`+1 pts (Correct)`, `0 pts (Incorrect)`, `Pending Review`).
   - Read-only Monaco code viewer displaying submitted implementation and telemetry statistics.
+
+### Module 6: Super Admin & Centralized Event Logging (`superAdmin` / `logs`)
+- **Centralized `logs` Table**:
+  - Automatically records all critical institutional and candidate actions: `sign_up`, `sign_in`, `log_out`, `password_reset`, `2fa_setup`, `admin_create`, `test_create`, `test_edit`, `test_delete`, `test_attempt`, `test_finish`, `fullscreen_exit`, `anomaly_detected`, `auto_logout`.
+  - Schema: `id`, `eventType`, `userId`, `username`, `userEmail`, `timestamp`, `details` (JSON payload), `ipAddress`, `userAgent`, `createdAt`.
+- **Abstracted Super Admin Dashboard (`/super-admin`)**:
+  - Completely decoupled from instructor test authoring and student exam portal views to facilitate modular scaling and dedicated administrative capabilities.
+  - High-privilege access restricted to `SUPER_ADMIN` (and system `ADMIN`).
+  - **Omniscient Log Visibility**: Views audit events from all users, including candidates and test-creator faculty admins.
+  - **Multi-Dimensional Filters**: Fuzzy search by username/email/keywords, event type dropdown filter, timeframe selector (All Time, Today, 24 Hours, 7 Days), pagination.
+  - **Interactive Features**: Auto-refresh toggle (8s interval), detailed JSON event payload inspection modal, and CSV export.
 
 ---
 
@@ -535,11 +567,113 @@ sequenceDiagram
     end
 ```
 
+### 7.6 Super Admin Real-Time Log Auditing & Multi-Dimensional Filtering
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor SuperAdmin as Super Administrator
+    participant Dashboard as SuperAdminPage (/super-admin)
+    participant AuthGuard as Router / Role Guard
+    participant SuperAdminMod as superAdmin Module (/api/super-admin)
+    participant DB as PostgreSQL (logs table)
+
+    SuperAdmin->>Dashboard: Navigate to /super-admin
+    Dashboard->>AuthGuard: Verify SUPER_ADMIN or ADMIN role
+    alt Unauthorized Role
+        AuthGuard-->>Dashboard: Redirect /login or /dashboard (403 Forbidden)
+    else Authorized
+        Dashboard->>SuperAdminMod: GET /api/super-admin/logs?page=1&limit=25
+        SuperAdminMod->>DB: SELECT * FROM logs ORDER BY timestamp DESC
+        SuperAdminMod->>DB: Compute Aggregations (Total, Categories, Recent)
+        DB-->>SuperAdminMod: Return Log Rows + Breakdown Metrics
+        SuperAdminMod-->>Dashboard: 200 OK (logs[], pagination, stats)
+        Dashboard-->>SuperAdmin: Render Live Metrics, Filter Bar & Audit Table
+
+        loop Live Polling (Every 8 Seconds)
+            Dashboard->>SuperAdminMod: GET /api/super-admin/logs (with active filter params)
+            SuperAdminMod->>DB: SELECT filtered logs
+            DB-->>SuperAdminMod: Updated Log Records
+            SuperAdminMod-->>Dashboard: Fresh Real-Time Audit Trail
+        end
+
+        opt Filter by Event Type, User, or Date
+            SuperAdmin->>Dashboard: Select Event Type 'test_finish' & enter email 'student@proctora.edu'
+            Dashboard->>SuperAdminMod: GET /api/super-admin/logs?eventType=test_finish&userEmail=student@proctora.edu
+            SuperAdminMod->>DB: Query with WHERE event_type = ... AND user_email ILIKE ...
+            DB-->>SuperAdminMod: Filtered Records
+            SuperAdminMod-->>Dashboard: Updated Filtered View
+        end
+
+        opt Inspect Full JSON Payload
+            SuperAdmin->>Dashboard: Click "View" on Log Row
+            Dashboard-->>SuperAdmin: Render High-Contrast Modal with Pretty-Printed JSON Details
+        end
+
+        opt Export Audit Trail
+            SuperAdmin->>Dashboard: Click "Export Filtered CSV"
+            Dashboard-->>SuperAdmin: Browser triggers download of sanitized CSV ledger
+        end
+    end
+```
+
+### 7.7 Compulsory 2FA Enrollment & Two-Factor Password Recovery Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Student / Candidate
+    participant UI as Svelte Frontend
+    participant AuthMod as auth Module (/api/auth)
+    participant DB as PostgreSQL
+    participant Logger as eventLogger
+
+    Note over User, Logger: Compulsory 2FA Registration Flow
+    User->>UI: Fill Sign-Up Form (/register)
+    UI->>UI: Real-Time Password Strength Verification (Special Char, Digit, Mixed Case)
+    User->>UI: Submit Registration
+    UI->>AuthMod: POST /api/auth/register
+    AuthMod->>DB: Create User record (role: CANDIDATE)
+    AuthMod->>Logger: logEvent('sign_up')
+    AuthMod-->>UI: 201 Created (Auto-create session token)
+    UI->>UI: Direct Redirect to /2fa-setup (Compulsory, No Skip)
+    UI->>AuthMod: POST /api/auth/2fa/setup
+    AuthMod->>DB: Store encrypted TOTP Secret
+    AuthMod-->>UI: Return QR Code / otpauth URI & manual base32 key
+    User->>UI: Enter 6-digit Authenticator PIN & Submit
+    UI->>AuthMod: POST /api/auth/2fa/confirm
+    AuthMod->>DB: Set twoFactorEnabled = true
+    AuthMod->>Logger: logEvent('2fa_setup')
+    AuthMod-->>UI: 200 OK -> Redirect to /dashboard
+
+    Note over User, Logger: Two-Factor Password Recovery Flow
+    User->>UI: Click "Forgot password?" on /login
+    UI->>UI: Render /forgot-password
+    User->>UI: Enter Account Email & 6-digit 2FA Authenticator Code
+    UI->>AuthMod: POST /api/auth/forgot-password/verify-2fa
+    AuthMod->>DB: Find user by email, decrypt totpSecret
+    AuthMod->>AuthMod: Verify TOTP token via Speakeasy
+    alt Invalid 2FA PIN or User not found
+        AuthMod-->>UI: 400 Bad Request ("Invalid 2FA verification code")
+    else Valid 2FA PIN
+        AuthMod->>AuthMod: Generate signed resetToken (JWT with 15-min expiry)
+        AuthMod-->>UI: 200 OK ({ resetToken })
+        UI->>UI: Store resetToken in sessionStorage -> Redirect /reset-password
+        User->>UI: Enter New Password with Real-Time Strength Meter
+        UI->>AuthMod: POST /api/auth/reset-password { resetToken, newPassword }
+        AuthMod->>AuthMod: Verify resetToken signature and expiration
+        AuthMod->>DB: Hash new password with Argon2id and update user record
+        AuthMod->>Logger: logEvent('password_reset')
+        AuthMod-->>UI: 200 OK ("Password reset successfully")
+        UI->>UI: Redirect /login with Success Toast
+    end
+```
+
 ---
 
 ## 8. Complete API Endpoint Reference Catalog
 
-All 28 backend endpoints are mounted under the `/api` prefix.
+All 31 backend endpoints are mounted under the `/api` prefix.
 
 ### 8.1 Health & CSRF
 
@@ -552,12 +686,14 @@ All 28 backend endpoints are mounted under the `/api` prefix.
 
 | Method | Endpoint | Required Role | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | Public | Registers a new student account |
+| `POST` | `/api/auth/register` | Public | Registers a new student account (evaluates password policy) |
 | `POST` | `/api/auth/login` | Public | Authenticates credentials, verifies 2FA, sets refresh cookie |
 | `POST` | `/api/auth/refresh` | Public (Cookie) | Rotates refresh token and issues new JWT access token |
 | `POST` | `/api/auth/logout` | Authenticated | Invalidates session in database and clears cookies |
 | `POST` | `/api/auth/2fa/setup` | Authenticated | Generates TOTP secret and OTPAuth URI for authenticator app |
-| `POST` | `/api/auth/2fa/confirm` | Authenticated | Verifies 6-digit TOTP token to activate 2FA |
+| `POST` | `/api/auth/2fa/confirm` | Authenticated | Verifies 6-digit TOTP token to activate 2FA (compulsory) |
+| `POST` | `/api/auth/forgot-password/verify-2fa` | Public | Validates user email + 2FA TOTP code, returns signed reset token |
+| `POST` | `/api/auth/reset-password` | Public | Validates reset token and sets new password with Argon2id |
 | `POST` | `/api/auth/admin/create` | `ADMIN` | Provisions a new Administrator user |
 
 ### 8.3 Exam Configuration & Studio (`/api/exams`)
@@ -602,6 +738,14 @@ All 28 backend endpoints are mounted under the `/api` prefix.
 | `GET` | `/api/exams/:examId/monitor-feed` | `ADMIN` | Real-time live feed of candidate progress, desk, and scores |
 | `GET` | `/api/exams/:examId/candidates/:userId/sheet` | `ADMIN` | Fetches complete candidate answer sheet with grading details |
 | `GET` | `/api/exams/:examId/export` | `ADMIN` | Generates downloadable CSV report of all candidate scores |
+
+### 8.7 Super Admin & Centralized Event Logging (`/api/super-admin`)
+
+| Method | Endpoint | Required Role | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/super-admin/logs` | `SUPER_ADMIN`, `ADMIN` | Queries system-wide audit logs with multi-dimensional filtering, pagination, and category metrics breakdown |
+
+---
 
 ---
 
@@ -658,6 +802,31 @@ Follow these steps to manually verify every system feature in a web browser:
 7. Click **"Inspect Sheet"** or **"View Graded Sheet"**.
 8. Inspect the side-by-side evaluation modal showing exact candidate responses, correct keys, point pills, and the Monaco Python code snapshot.
 9. Click **"Export CSV"** in the top navigation bar to download the institutional grade ledger.
+
+#### Super Administrator Audit & Telemetry Journey:
+1. Open `http://localhost:5173/login`.
+2. Sign in with Super Admin credentials: `superadmin@proctora.edu` / `SuperAdmin@12345`.
+3. You are automatically routed to the decoupled **Super Admin Control Center** (`/super-admin`).
+4. Notice the top statistics cards displaying **Total Events**, **Security & Auth**, **Exam Activities**, and **Violations & Anomaly Alerts**.
+5. Test the filter toolbar:
+   - Select Event Type: `test_create`, `test_attempt`, `test_finish`, or `sign_in`.
+   - Filter by Email: `student@proctora.edu`.
+   - Notice the table filters instantaneously and updates the match count.
+6. Click **"View"** on any log row to open the high-contrast JSON modal and inspect the full raw payload (IP address, user agent, exam parameters, questions evaluated).
+7. Click **"Export Filtered CSV"** to download an audit trail for compliance and institutional reporting.
+8. Verify that the table auto-polls in real-time every 8 seconds as actions occur across the cluster.
+
+#### Registration Password Strength & 2FA Recovery Journey:
+1. Navigate to `http://localhost:5173/register`.
+2. Type an all-lowercase password like `password` — notice the 3 criteria chips (*Special character*, *Number*, *Mixed case*) and the **Red** meter indicator.
+3. Add a number (`password1`) — notice the meter turns **Orange** and indicates 1 satisfied condition.
+4. Add an uppercase letter and symbol (`Password@123`) — notice all 3 chips illuminate green with checkmarks and the meter turns **Green** (Strength: Strong).
+5. Complete sign-up: notice you are immediately redirected to `/2fa-setup` where 2FA activation is mandatory (no bypass).
+6. To test password recovery, navigate to `http://localhost:5173/login` and click **"Forgot password?"**.
+7. Enter registered email `student@proctora.edu` and the current 6-digit TOTP authenticator code from your authenticator app.
+8. Upon successful TOTP verification, you are granted a temporary cryptographically signed JWT reset token and redirected to `/reset-password`.
+9. Enter a new strong password verified by the real-time strength meter.
+10. Submit and sign in with the new password. Verify in the Super Admin log console that `password_reset` was logged.
 
 ---
 

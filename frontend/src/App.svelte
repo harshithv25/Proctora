@@ -14,12 +14,18 @@
   import ExamSubmittedPage from './pages/ExamSubmittedPage.svelte';
   import AdminExamsPage from './pages/AdminExamsPage.svelte';
   import AdminMonitorPage from './pages/AdminMonitorPage.svelte';
+  import ForgotPasswordPage from './pages/ForgotPasswordPage.svelte';
+  import ResetPasswordPage from './pages/ResetPasswordPage.svelte';
+  import SuperAdminPage from './pages/SuperAdminPage.svelte';
 
   const routes = {
     '/': LandingPage,
     '/login': LoginPage,
     '/register': RegisterPage,
     '/2fa-setup': TwoFactorSetupPage,
+    '/forgot-password': ForgotPasswordPage,
+    '/reset-password': ResetPasswordPage,
+    '/super-admin': SuperAdminPage,
     '/dashboard': DashboardPage,
     '/exams/:examId/device-check': DeviceCheckPage,
     '/exams/:examId/portal': ExamPortalPage,

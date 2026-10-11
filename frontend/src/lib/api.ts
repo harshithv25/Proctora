@@ -3,8 +3,10 @@ import axios from 'axios';
 let csrfToken: string | null = null;
 let accessToken: string | null = localStorage.getItem('proctora_access_token');
 
+const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+
 export const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBase,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -26,7 +28,7 @@ export function getAccessToken(): string | null {
 
 export async function fetchCsrfToken(): Promise<string> {
   try {
-    const res = await axios.get('/api/csrf-token', { withCredentials: true });
+    const res = await axios.get(`${apiBase}/csrf-token`, { withCredentials: true });
     const token = res.data?.data?.csrfToken || '';
     csrfToken = token;
     return token;

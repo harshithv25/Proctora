@@ -4,6 +4,7 @@ import examConfigRouter from "../modules/examConfig/router";
 import examDeliveryRouter from "../modules/examDelivery/router";
 import integrityRouter from "../modules/integrityMonitoring/router";
 import evaluationRouter from "../modules/evaluationExport/router";
+import superAdminRouter from "../modules/superAdmin/router";
 import { generateToken } from "../middleware/csrf.middleware";
 
 const router = Router();
@@ -26,5 +27,6 @@ router.use("/exams", examConfigRouter);
 router.use("/exams", examDeliveryRouter);
 router.use("/exams", integrityRouter);
 router.use("/exams", evaluationRouter);
+router.use("/super-admin", superAdminRouter);
 
 export default router;

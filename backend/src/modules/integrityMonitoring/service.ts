@@ -1,5 +1,6 @@
 import { prisma } from "../../config/db";
 import { encrypt } from "../../lib/crypto";
+import { logEvent } from "../../lib/eventLogger";
 
 export async function recordProctoringFrame(
   examId: string,
@@ -20,7 +21,7 @@ export async function recordProctoringFrame(
   const encryptedDetails = encrypt(data.details);
   const flagged = data.cheatProbability >= 0.65;
 
-  return prisma.proctoringEvent.create({
+  const event = await prisma.proctoringEvent.create({
     data: {
       examId: resolvedExamId,
       userId,
@@ -31,6 +32,20 @@ export async function recordProctoringFrame(
       detailsEncrypted: encryptedDetails,
     },
   });
+
+  if (flagged) {
+    await logEvent({
+      eventType: "anomaly_detected",
+      userId,
+      details: {
+        examId: resolvedExamId,
+        cheatProbability: data.cheatProbability,
+        reason: data.details,
+      },
+    });
+  }
+
+  return event;
 }
 
 export async function recordEditorTelemetry(
@@ -78,5 +93,12 @@ export async function triggerAutoLogout(
     },
   });
 
+  await logEvent({
+    eventType: "auto_logout",
+    userId,
+    details: { examId, reason },
+  });
+
   return { message: `Auto-logout triggered for user ${userId}: ${reason}` };
 }
+

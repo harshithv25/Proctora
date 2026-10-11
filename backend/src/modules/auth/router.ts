@@ -4,7 +4,13 @@ import { validate } from "../../middleware/validate.middleware";
 import { authenticate } from "../../middleware/auth.middleware";
 import { requireRole } from "../../middleware/rbac.middleware";
 import { authLimiter, strictLimiter } from "../../middleware/rateLimit.middleware";
-import { registerSchema, loginSchema, adminCreateSchema } from "./schema";
+import {
+  registerSchema,
+  loginSchema,
+  adminCreateSchema,
+  forgotPasswordVerifySchema,
+  resetPasswordSchema,
+} from "./schema";
 
 const router = Router();
 
@@ -41,6 +47,20 @@ router.post(
 );
 
 router.post(
+  "/forgot-password/verify-2fa",
+  strictLimiter,
+  validate({ body: forgotPasswordVerifySchema }),
+  authController.verify2FaForReset
+);
+
+router.post(
+  "/reset-password",
+  strictLimiter,
+  validate({ body: resetPasswordSchema }),
+  authController.resetPassword
+);
+
+router.post(
   "/admin/create",
   authenticate,
   requireRole("ADMIN"),
@@ -49,3 +69,4 @@ router.post(
 );
 
 export default router;
+

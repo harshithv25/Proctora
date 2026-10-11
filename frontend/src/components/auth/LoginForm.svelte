@@ -52,7 +52,11 @@
 
     if (result.success && result.user) {
       appStore.addToast(`Welcome back, ${result.user.name}`, 'success');
-      push('/dashboard');
+      if (result.user.role === 'SUPER_ADMIN') {
+        push('/super-admin');
+      } else {
+        push('/dashboard');
+      }
     } else if (result.requires2fa) {
       appStore.addToast('2-Factor authentication required. Enter your code.', 'info');
     }
@@ -80,16 +84,27 @@
         oninput={(v) => authStore.updateField('email', v)}
       />
 
-      <Input
-        id="login-password"
-        type="password"
-        label="Password"
-        value={authStore.form.password}
-        placeholder="••••••••"
-        error={formErrors.password}
-        autocomplete="current-password"
-        oninput={(v) => authStore.updateField('password', v)}
-      />
+      <div class="password-group">
+        <Input
+          id="login-password"
+          type="password"
+          label="Password"
+          value={authStore.form.password}
+          placeholder="••••••••"
+          error={formErrors.password}
+          autocomplete="current-password"
+          oninput={(v) => authStore.updateField('password', v)}
+        />
+        <div class="forgot-wrapper">
+          <button
+            type="button"
+            class="forgot-link"
+            onclick={() => push('/forgot-password')}
+          >
+            Forgot password?
+          </button>
+        </div>
+      </div>
     </div>
 
     {#if authStore.error}
@@ -201,4 +216,31 @@
     flex-direction: column;
     gap: var(--space-2);
   }
+
+  .password-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .forgot-wrapper {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .forgot-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+  }
+
+  .forgot-link:hover {
+    color: var(--color-text-primary);
+  }
 </style>
+

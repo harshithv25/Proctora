@@ -294,7 +294,8 @@
       const windowStart = new Date(Date.now() - 2500).toISOString();
       const windowEnd = new Date().toISOString();
 
-      const res = await fetch('/ai-proctor/analyze-frame', {
+      const aiBase = import.meta.env.VITE_AI_URL || '/ai-proctor';
+      const res = await fetch(`${aiBase}/analyze-frame`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

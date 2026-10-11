@@ -1,6 +1,6 @@
 import { api, setAccessToken, getAccessToken, getErrorMessage } from '../lib/api';
 
-export type AuthRole = 'CANDIDATE' | 'ADMIN';
+export type AuthRole = 'CANDIDATE' | 'ADMIN' | 'SUPER_ADMIN';
 
 export interface AuthUser {
   id: string;
@@ -120,7 +120,48 @@ function createAuthStore() {
         ...(payload.rollNumber?.trim() ? { rollNumber: payload.rollNumber.trim() } : {}),
         password: payload.password,
       });
-      return { success: true, user: res.data.data.user };
+      const data = res.data.data;
+      if (data?.accessToken) {
+        setAccessToken(data.accessToken);
+        setUser(data);
+      }
+      return { success: true, user: data };
+    } catch (err) {
+      const msg = getErrorMessage(err);
+      error = msg;
+      return { success: false, error: msg };
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function verify2FaForReset(email: string, totpCode: string) {
+    isLoading = true;
+    error = null;
+    try {
+      const res = await api.post('/auth/forgot-password/verify-2fa', {
+        email: email.trim(),
+        totpCode: totpCode.trim(),
+      });
+      return { success: true, resetToken: res.data.data.resetToken as string };
+    } catch (err) {
+      const msg = getErrorMessage(err);
+      error = msg;
+      return { success: false, error: msg };
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function resetPassword(resetToken: string, newPassword: string) {
+    isLoading = true;
+    error = null;
+    try {
+      const res = await api.post('/auth/reset-password', {
+        resetToken,
+        newPassword,
+      });
+      return { success: true, message: res.data.data.message as string };
     } catch (err) {
       const msg = getErrorMessage(err);
       error = msg;
@@ -186,6 +227,8 @@ function createAuthStore() {
     setUser,
     login,
     register,
+    verify2FaForReset,
+    resetPassword,
     setup2FA,
     confirm2FA,
     logout,
@@ -193,3 +236,4 @@ function createAuthStore() {
 }
 
 export const authStore = createAuthStore();
+

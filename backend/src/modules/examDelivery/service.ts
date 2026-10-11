@@ -1,5 +1,6 @@
 import { prisma } from "../../config/db";
 import { NotFoundError, ForbiddenError } from "../../lib/apiError";
+import { logEvent } from "../../lib/eventLogger";
 
 export async function deviceCheck(
   _examId: string,
@@ -148,6 +149,23 @@ export async function getQuestions(examIdOrTestId: string, userId?: string) {
     };
   });
 
+  if (user.role === "CANDIDATE") {
+    await logEvent({
+      eventType: "test_attempt",
+      userId: user.id,
+      username: user.name,
+      userEmail: user.email,
+      details: {
+        examId: exam.id,
+        testId: exam.testId || exam.id,
+        title: exam.title,
+        seatRow: seatAssignment.seatRow,
+        seatCol: seatAssignment.seatCol,
+        questionSetId: seatAssignment.questionSetId || "SET-A",
+      },
+    });
+  }
+
   return {
     examId: exam.id,
     testId: exam.testId || exam.id,
@@ -164,13 +182,24 @@ export async function logFullscreenEvent(
   userId: string,
   eventType: string
 ) {
-  return prisma.focusLog.create({
+  const result = await prisma.focusLog.create({
     data: {
       examId,
       userId,
       eventType: `fullscreen_${eventType}`,
     },
   });
+
+  await logEvent({
+    eventType: eventType.includes("exit") ? "fullscreen_exit" : "fullscreen_event",
+    userId,
+    details: {
+      examId,
+      eventType,
+    },
+  });
+
+  return result;
 }
 
 export async function getSessionConfig(examIdOrTestId: string, userId: string) {

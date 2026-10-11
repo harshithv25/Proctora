@@ -4,8 +4,23 @@ import { env } from "../../config/env";
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
-    const user = await authService.registerCandidate(req.body);
-    res.status(201).json({ data: user });
+    const result = await authService.registerCandidate(
+      req.body,
+      req.headers["user-agent"],
+      req.ip
+    );
+
+    if (result.refreshToken) {
+      res.cookie("refreshToken", result.refreshToken, {
+        httpOnly: true,
+        secure: env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/api/auth/refresh",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
+
+    res.status(201).json({ data: result });
   } catch (err) {
     next(err);
   }
@@ -104,3 +119,28 @@ export async function createAdmin(req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+
+export async function verify2FaForReset(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await authService.verify2FaForPasswordReset(
+      req.body.email,
+      req.body.totpCode
+    );
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await authService.resetPassword(
+      req.body.resetToken,
+      req.body.newPassword
+    );
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+

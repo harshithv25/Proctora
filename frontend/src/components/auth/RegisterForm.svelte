@@ -3,6 +3,7 @@
   import { push } from '../../lib/router.svelte';
   import Input from '../ui/Input.svelte';
   import Button from '../ui/Button.svelte';
+  import PasswordStrengthIndicator from './PasswordStrengthIndicator.svelte';
   import { authStore } from '../../stores/auth.store.svelte';
   import { appStore } from '../../stores/app.store.svelte';
 
@@ -30,10 +31,16 @@
       errors.rollNumber = 'Roll number is required';
     }
 
+    const hasSpecial = /[^A-Za-z0-9]/.test(authStore.form.password);
+    const hasNumber = /[0-9]/.test(authStore.form.password);
+    const hasMixedCase = /[a-z]/.test(authStore.form.password) && /[A-Z]/.test(authStore.form.password);
+
     if (!authStore.form.password) {
       errors.password = 'Password is required';
     } else if (authStore.form.password.length < 8) {
       errors.password = 'Minimum 8 characters';
+    } else if (!hasSpecial || !hasNumber || !hasMixedCase) {
+      errors.password = 'Password must satisfy all strength rules below';
     }
 
     if (!authStore.form.confirmPassword) {
@@ -58,8 +65,8 @@
     });
 
     if (result.success) {
-      appStore.addToast('Account created successfully! Please sign in.', 'success');
-      push('/login');
+      appStore.addToast('Account created! Please complete mandatory 2FA setup to secure your account.', 'info');
+      push('/2fa-setup');
     }
   }
 </script>
@@ -121,7 +128,11 @@
         oninput={(v) => authStore.updateField('confirmPassword', v)}
       />
     </div>
+
+    <!-- Password strength indicator below password text field -->
+    <PasswordStrengthIndicator password={authStore.form.password} />
   </div>
+
 
   {#if authStore.error}
     <div class="form-error">

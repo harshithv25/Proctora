@@ -1,4 +1,5 @@
 import argon2 from "argon2";
+import jwt from "jsonwebtoken";
 import { prisma } from "../../config/db";
 import {
   signAccessToken,
@@ -20,10 +21,15 @@ import {
 } from "../../lib/apiError";
 import { RegisterInput, LoginInput, AdminCreateInput } from "./schema";
 import { env } from "../../config/env";
+import { logEvent } from "../../lib/eventLogger";
 
 const MAX_FAILED_ATTEMPTS = 5;
 
-export async function registerCandidate(data: RegisterInput) {
+export async function registerCandidate(
+  data: RegisterInput,
+  userAgent?: string,
+  ipAddress?: string
+) {
   const existing = await prisma.user.findUnique({
     where: { email: data.email },
   });
@@ -47,11 +53,47 @@ export async function registerCandidate(data: RegisterInput) {
       name: true,
       email: true,
       role: true,
+      rollNumber: true,
       createdAt: true,
     },
   });
 
-  return user;
+  const accessToken = signAccessToken({
+    userId: user.id,
+    role: user.role,
+  });
+
+  const rawRefreshToken = generateRefreshToken();
+  const hashedRefreshToken = hashRefreshToken(rawRefreshToken);
+
+  const refreshTTLMs =
+    parseInt(env.JWT_REFRESH_TTL) * 24 * 60 * 60 * 1000 || 7 * 24 * 60 * 60 * 1000;
+
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      refreshToken: hashedRefreshToken,
+      userAgent: userAgent ?? null,
+      ipAddress: ipAddress ?? null,
+      expiresAt: new Date(Date.now() + refreshTTLMs),
+    },
+  });
+
+  await logEvent({
+    eventType: "sign_up",
+    userId: user.id,
+    username: user.name,
+    userEmail: user.email,
+    details: { role: user.role, rollNumber: user.rollNumber },
+    userAgent,
+    ipAddress,
+  });
+
+  return {
+    ...user,
+    accessToken,
+    refreshToken: rawRefreshToken,
+  };
 }
 
 export async function login(
@@ -136,6 +178,16 @@ export async function login(
     },
   });
 
+  await logEvent({
+    eventType: "sign_in",
+    userId: user.id,
+    username: user.name,
+    userEmail: user.email,
+    details: { role: user.role },
+    userAgent,
+    ipAddress,
+  });
+
   return {
     accessToken,
     refreshToken: rawRefreshToken,
@@ -202,6 +254,11 @@ export async function logout(userId: string, refreshToken?: string) {
   } else {
     await prisma.session.deleteMany({ where: { userId } });
   }
+
+  await logEvent({
+    eventType: "log_out",
+    userId,
+  });
 }
 
 export async function setupTotp(userId: string) {
@@ -236,6 +293,14 @@ export async function confirmTotp(userId: string, secret: string) {
     data: { totpSecret: encryptedSecret },
   });
 
+  await logEvent({
+    eventType: "2fa_setup",
+    userId: user.id,
+    username: user.name,
+    userEmail: user.email,
+    details: { status: "enabled" },
+  });
+
   return { message: "Two-factor authentication configured successfully" };
 }
 
@@ -266,5 +331,100 @@ export async function createAdmin(data: AdminCreateInput) {
     },
   });
 
+  await logEvent({
+    eventType: "admin_create",
+    userId: user.id,
+    username: user.name,
+    userEmail: user.email,
+    details: { role: "ADMIN" },
+  });
+
   return user;
 }
+
+export async function verify2FaForPasswordReset(email: string, totpCode: string) {
+  const user = await prisma.user.findUnique({
+    where: { email: email.trim().toLowerCase() },
+  });
+
+  if (!user) {
+    throw new NotFoundError("User with this email not found", "USER_NOT_FOUND");
+  }
+
+  if (!user.totpSecret) {
+    throw new BadRequestError(
+      "Two-factor authentication is not configured for this account. Please contact system support.",
+      "AUTH_2FA_NOT_CONFIGURED"
+    );
+  }
+
+  const decryptedSecret = decryptTotpSecret(user.totpSecret);
+  const isValid = verifyTotpCode(decryptedSecret, totpCode.trim());
+
+  if (!isValid) {
+    throw new UnauthorizedError("Invalid 2FA code", "AUTH_INVALID_2FA");
+  }
+
+  const resetToken = jwt.sign(
+    { userId: user.id, email: user.email, purpose: "password_reset" },
+    env.JWT_ACCESS_SECRET,
+    { expiresIn: "15m" }
+  );
+
+  return {
+    resetToken,
+    email: user.email,
+    message: "Two-factor authentication verified successfully",
+  };
+}
+
+export async function resetPassword(resetToken: string, newPassword: string) {
+  let decoded: any;
+  try {
+    decoded = jwt.verify(resetToken, env.JWT_ACCESS_SECRET);
+  } catch (err) {
+    throw new UnauthorizedError(
+      "Invalid or expired password reset session",
+      "AUTH_INVALID_RESET_TOKEN"
+    );
+  }
+
+  if (!decoded || decoded.purpose !== "password_reset" || !decoded.userId) {
+    throw new UnauthorizedError(
+      "Invalid password reset token claims",
+      "AUTH_INVALID_RESET_TOKEN"
+    );
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: decoded.userId },
+  });
+
+  if (!user) {
+    throw new NotFoundError("User not found", "USER_NOT_FOUND");
+  }
+
+  const passwordHash = await argon2.hash(newPassword);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      failedLoginAttempts: 0,
+      isLocked: false,
+    },
+  });
+
+  await logEvent({
+    eventType: "password_reset",
+    userId: user.id,
+    username: user.name,
+    userEmail: user.email,
+    details: { resetVia: "totp_2fa" },
+  });
+
+  return {
+    message: "Password updated successfully. You can now log in with your new password.",
+  };
+}
+

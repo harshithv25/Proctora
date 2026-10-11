@@ -2,6 +2,7 @@ import { prisma } from "../../config/db";
 import { AppError, NotFoundError, ForbiddenError } from "../../lib/apiError";
 import { evaluateResponses, ExamEvaluationResult } from "./grading";
 import { decrypt } from "../../lib/crypto";
+import { logEvent } from "../../lib/eventLogger";
 
 export async function ensureExamExists(examIdentifier: string, userId = "system") {
   const existing = await prisma.exam.findFirst({
@@ -128,8 +129,9 @@ export async function submit(
     where: { examId: exam.id, userId },
   });
 
+  let responseRecord;
   if (existing) {
-    return (prisma.examResponse as any).update({
+    responseRecord = await (prisma.examResponse as any).update({
       where: { id: existing.id },
       data: {
         answers: answers as any,
@@ -140,21 +142,43 @@ export async function submit(
         submittedAt: new Date(),
       },
     });
+  } else {
+    responseRecord = await (prisma.examResponse as any).create({
+      data: {
+        examId: exam.id,
+        userId,
+        answers: answers as any,
+        score: gradingResult.totalScore,
+        maxScore: gradingResult.maxScore,
+        evaluationDetails: gradingResult.breakdown as any,
+        submittedVia,
+        startedAt: new Date(),
+        submittedAt: new Date(),
+      },
+    });
   }
 
-  return (prisma.examResponse as any).create({
-    data: {
+  const candidate = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true },
+  });
+
+  await logEvent({
+    eventType: "test_finish",
+    userId,
+    username: candidate?.name,
+    userEmail: candidate?.email,
+    details: {
       examId: exam.id,
-      userId,
-      answers: answers as any,
+      testId: exam.testId || exam.id,
+      title: exam.title,
+      submittedVia,
       score: gradingResult.totalScore,
       maxScore: gradingResult.maxScore,
-      evaluationDetails: gradingResult.breakdown as any,
-      submittedVia,
-      startedAt: new Date(),
-      submittedAt: new Date(),
     },
   });
+
+  return responseRecord;
 }
 
 export async function exportResponses(examIdentifier: string) {

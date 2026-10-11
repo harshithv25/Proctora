@@ -1,0 +1,59 @@
+# Render Blueprint specification for Proctora Full-Stack Infrastructure
+# To deploy: Render Dashboard -> "New" -> "Blueprint" -> Connect Repository
+version: "1"
+
+databases:
+  - name: proctora-db
+    databaseName: proctora
+    user: proctora_user
+    plan: starter
+    postgresMajorVersion: "16"
+
+services:
+  # 1. Express 5 / Prisma / Node.js Backend API
+  - type: web
+    name: proctora-backend
+    runtime: node
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    preDeployCommand: npx prisma db push
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: proctora-db
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 7d
+      # 64-hex-character AES-256 key (32 bytes)
+      - key: AES_ENCRYPTION_KEY
+        generateValue: true
+      - key: CSRF_SECRET
+        generateValue: true
+      - key: TOTP_ISSUER
+        value: NITK-Proctora
+      # Set this to your deployed Vercel frontend URL, e.g. https://proctora.vercel.app
+      - key: CLIENT_URL
+        sync: false
+
+  # 2. FastAPI YOLOv8 AI Proctoring Microservice
+  - type: web
+    name: proctora-ai
+    runtime: docker
+    plan: starter
+    rootDir: ai-service
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: PORT
+        value: 5001
