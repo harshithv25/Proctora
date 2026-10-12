@@ -8,7 +8,17 @@ declare global {
 }
 
 function createPrismaClient(): PrismaClient {
-  const pool = new Pool({ connectionString: env.DATABASE_URL });
+  const isRemote =
+    env.DATABASE_URL.includes("render.com") ||
+    env.DATABASE_URL.includes("sslmode=") ||
+    env.DATABASE_URL.includes("supabase.co") ||
+    env.DATABASE_URL.includes("neon.tech") ||
+    env.NODE_ENV === "production";
+
+  const pool = new Pool({
+    connectionString: env.DATABASE_URL,
+    ssl: isRemote ? { rejectUnauthorized: false } : undefined,
+  });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,

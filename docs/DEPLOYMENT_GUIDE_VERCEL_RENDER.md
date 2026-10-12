@@ -96,15 +96,14 @@ The backend is an Express 5 + TypeScript server with Prisma ORM and WebSockets.
      ```bash
      npm install && npx prisma generate && npm run build
      ```
-   * **Pre-Deploy Command:**
-     ```bash
-     npx prisma db push
-     ```
+   * **Pre-Deploy Command:**  
+     *Leave **EMPTY / BLANK*** (Pre-deploy commands require a paid plan on Render. Your database schema is already synchronized via `npx prisma db push`).
    * **Start Command:**
      ```bash
      npm start
      ```
-   * **Instance Type:** `Starter` (or `Free`)
+     *(Or on Free tier, if you ever want auto-sync on boot: `npx prisma db push && npm start`)*
+   * **Instance Type:** `Free` or `Starter`
 
 ### Step 2.2: Configure Backend Environment Variables
 Under the **"Environment Variables"** tab on Render, add the following:
