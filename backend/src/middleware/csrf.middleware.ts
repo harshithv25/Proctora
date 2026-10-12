@@ -1,14 +1,16 @@
 import { doubleCsrf } from "csrf-csrf";
 import { env } from "../config/env";
 
+const isProduction = env.NODE_ENV === "production";
+
 const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getSecret: () => env.CSRF_SECRET,
-  getSessionIdentifier: (req) => req.cookies?.sessionId || req.ip || "proctora_session",
+  getSessionIdentifier: () => "proctora_session",
   cookieName: "__csrf",
   cookieOptions: {
     httpOnly: false,
-    sameSite: "lax",
-    secure: env.NODE_ENV === "production",
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
     path: "/",
   },
   getCsrfTokenFromRequest: (req) =>
@@ -16,12 +18,15 @@ const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   skipCsrfProtection: (req) => {
     const path = req.originalUrl || req.url || "";
     if (
-      path.includes("/auth/login") ||
-      path.includes("/auth/register") ||
-      path.includes("/auth/refresh") ||
       path.includes("/csrf-token") ||
-      path.includes("/health")
+      path.includes("/health") ||
+      path.includes("/healthz") ||
+      path.includes("/auth/")
     ) {
+      return true;
+    }
+    const authHeader = req.headers["authorization"];
+    if (authHeader && authHeader.startsWith("Bearer ")) {
       return true;
     }
     return false;

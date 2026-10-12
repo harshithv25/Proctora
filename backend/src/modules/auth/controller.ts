@@ -14,7 +14,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
       res.cookie("refreshToken", result.refreshToken, {
         httpOnly: true,
         secure: env.NODE_ENV === "production",
-        sameSite: "strict",
+        sameSite: env.NODE_ENV === "production" ? "none" : "lax",
         path: "/api/auth/refresh",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
@@ -37,7 +37,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     res.cookie("refreshToken", result.refreshToken, {
       httpOnly: true,
       secure: env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: env.NODE_ENV === "production" ? "none" : "lax",
       path: "/api/auth/refresh",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -69,7 +69,7 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
     res.cookie("refreshToken", result.refreshToken, {
       httpOnly: true,
       secure: env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: env.NODE_ENV === "production" ? "none" : "lax",
       path: "/api/auth/refresh",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -85,7 +85,11 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
     const refreshToken = req.cookies?.refreshToken;
     await authService.logout(req.user!.userId, refreshToken);
 
-    res.clearCookie("refreshToken", { path: "/api/auth/refresh" });
+    res.clearCookie("refreshToken", {
+      path: "/api/auth/refresh",
+      secure: env.NODE_ENV === "production",
+      sameSite: env.NODE_ENV === "production" ? "none" : "lax",
+    });
     res.json({ data: { message: "Logged out successfully" } });
   } catch (err) {
     next(err);
