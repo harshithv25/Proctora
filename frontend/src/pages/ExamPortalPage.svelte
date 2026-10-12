@@ -336,7 +336,7 @@
         }, 5000);
 
         playAlertBeep(isCritical ? 'critical' : 'warning');
-        appStore.addToast(`AI Proctor: ${title}`, isCritical ? 'error' : 'warning');
+        appStore.addToast(`AI Proctor: ${title}`, isCritical ? 'error' : 'info');
 
         // Throttle backend event persistence to once every 4 seconds to avoid network flooding
         const now = Date.now();

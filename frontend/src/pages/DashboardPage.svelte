@@ -17,7 +17,7 @@
     }
     requestAnimationFrame(() => { mounted = true; });
 
-    if (authStore.user?.role === 'ADMIN') {
+    if (authStore.user?.role === 'ADMIN' || authStore.user?.role === 'SUPER_ADMIN') {
       await loadExams();
     }
   });
@@ -99,11 +99,36 @@
 <div class="dashboard-page" class:visible={mounted}>
   <header class="dash-navbar">
     <div class="nav-left">
-      <span class="brand-wordmark">proctora</span>
+      <div
+        class="nav-brand"
+        onclick={() => push('/')}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => e.key === 'Enter' && push('/')}
+      >
+        <svg
+          class="nav-logo"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <path d="M9 12l2 2 4-4" />
+        </svg>
+        <span class="brand-wordmark">proctora</span>
+      </div>
       <span class="nav-role-badge">{authStore.user?.role || 'CANDIDATE'}</span>
     </div>
     <div class="nav-right">
       <span class="user-name">{authStore.user?.name || 'User'}</span>
+      {#if authStore.user?.role === 'SUPER_ADMIN'}
+        <Button variant="secondary" onclick={() => push('/super-admin')}>
+          Audit Logs
+        </Button>
+      {/if}
       <Button variant="ghost" onclick={() => push('/2fa-setup')}>
         2FA Security
       </Button>
@@ -117,7 +142,7 @@
     <section class="welcome-banner">
       <h1 class="welcome-title">Welcome, {authStore.user?.name || 'Administrator'}</h1>
       <p class="welcome-sub">
-        {#if authStore.user?.role === 'ADMIN'}
+        {#if authStore.user?.role === 'ADMIN' || authStore.user?.role === 'SUPER_ADMIN'}
           Institutional Examination Control & Real-Time Test Overview
         {:else}
           Upcoming scheduled examinations and active session testing
@@ -125,7 +150,7 @@
       </p>
     </section>
 
-    {#if authStore.user?.role === 'ADMIN'}
+    {#if authStore.user?.role === 'ADMIN' || authStore.user?.role === 'SUPER_ADMIN'}
       <!-- KPI Stats Strip -->
       <div class="stats-banner">
         <div class="stat-card">
@@ -410,6 +435,19 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+  }
+
+  .nav-logo {
+    width: 20px;
+    height: 20px;
+    color: var(--color-text-primary);
   }
 
   .brand-wordmark {

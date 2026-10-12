@@ -62,10 +62,10 @@
 
       <!-- Action Buttons -->
       <div class="cta-group">
-        <Button variant="primary" size="lg" onclick={() => push('/login')}>
+        <Button variant="primary" onclick={() => push('/login')}>
           Candidate Portal
         </Button>
-        <Button variant="secondary" size="lg" onclick={() => push('/register')}>
+        <Button variant="secondary" onclick={() => push('/register')}>
           Register Account
         </Button>
       </div>
