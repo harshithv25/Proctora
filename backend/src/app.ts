@@ -31,6 +31,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use(globalLimiter);
 app.use(doubleCsrfProtection);
 
+app.get("/", (_req, res) => {
+  res.status(200).json({ status: "healthy", message: "Proctora API is live" });
+});
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
 app.use("/api", apiRouter);
 
 app.use((_req, _res, next) => {

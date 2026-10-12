@@ -23,9 +23,9 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-server.listen(env.PORT, () => {
+server.listen(env.PORT, "0.0.0.0", () => {
   console.log(`Proctora Backend running on port ${env.PORT}`);
   console.log(`Environment: ${env.NODE_ENV}`);
-  console.log(`API: http://localhost:${env.PORT}/api`);
-  console.log(`WebSocket: ws://localhost:${env.PORT}/ws`);
+  console.log(`API: http://0.0.0.0:${env.PORT}/api`);
+  console.log(`WebSocket: ws://0.0.0.0:${env.PORT}/ws`);
 });
