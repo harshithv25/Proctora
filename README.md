@@ -361,7 +361,7 @@ bash test/run_tests.sh
 | **F.5** | **Device Compatibility Check** | Pre-flight diagnostics for webcam, microphone, network throughput, and browser feature support with remediation steps. | High |
 | **F.6** | **Seating-Based Question Shuffling** | Parsing row/col seating charts to distribute non-overlapping or distinct question orders to adjacent candidates; optional standard pool shuffling. | High |
 | **F.7** | **AI Proctoring Pipeline** | Continuous video analysis with rolling temporal windows to suppress momentary false-positive alerts while detecting gaze anomalies, absence, or extra persons. | High |
-| **F.8** | **Code Telemetry Capture** | Granular capture of Monaco editor keystrokes, text deltas, paste anomalies, and code runs for post-exam scrubbing and replay playback. | Medium |
+| **F.8** | **Code Telemetry Capture** | Granular capture of Monaco editor keystrokes,, text deltas, paste anomalies, and code runs for post-exam scrubbing and replay playback. | Medium |
 | **F.9** | **Browser Focus Tracking** | Real-time logging of tab blurs, window minimizations, and lost visibility events with aggregated infraction counters. | Medium |
 | **F.10** | **Response Autosave & Collection** | Periodic in-flight response synchronization to cloud storage and atomic collection on manual submit or timer expiration. | High |
 | **F.11** | **Real-Time Proctoring Alerts** | Instant WebSocket notifications pushed to the Admin Dashboard when candidate infraction scores cross configurable thresholds. | Medium |
