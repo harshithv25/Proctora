@@ -212,18 +212,7 @@
         tabindex="0"
         onkeydown={(e) => e.key === 'Enter' && push('/')}
       >
-        <svg
-          class="nav-logo"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-          <path d="M9 12l2 2 4-4" />
-        </svg>
+        <img src="/Icon_proctora.png" alt="Proctora Logo" class="nav-logo" />
         <span class="brand-wordmark">proctora</span>
       </div>
       <span class="nav-role-badge">SUPER ADMIN</span>
@@ -616,9 +605,10 @@
   }
 
   .nav-logo {
-    width: 20px;
-    height: 20px;
-    color: var(--color-text-primary);
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 4px;
   }
 
   .brand-wordmark {

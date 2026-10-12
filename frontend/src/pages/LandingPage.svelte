@@ -19,10 +19,7 @@
   <nav class="top-nav" class:visible={mounted}>
     <div class="nav-content">
       <div class="nav-brand">
-        <svg class="nav-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-          <path d="M9 12l2 2 4-4" />
-        </svg>
+        <img src="/Icon_proctora.png" alt="Proctora Logo" class="nav-logo" />
         <span class="nav-wordmark">proctora</span>
       </div>
 
@@ -44,10 +41,7 @@
       <!-- Main Logo & Emblem -->
       <div class="logo-wrapper">
         <div class="shield-badge">
-          <svg class="main-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            <path d="M9 12l2 2 4-4" />
-          </svg>
+          <img src="/Icon_proctora.png" alt="Proctora Logo" class="main-shield" />
         </div>
 
         <h1 class="project-title">proctora</h1>
@@ -202,9 +196,10 @@
   }
 
   .nav-logo {
-    width: 20px;
-    height: 20px;
-    color: var(--color-text-primary);
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 4px;
   }
 
   .nav-wordmark {
@@ -258,21 +253,22 @@
   }
 
   .shield-badge {
-    width: 58px;
-    height: 58px;
+    width: 76px;
+    height: 76px;
     display: flex;
     align-items: center;
     justify-content: center;
     background-color: var(--color-bg-elevated);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+    border-radius: 16px;
     box-shadow: var(--shadow-sm);
     color: var(--color-text-primary);
   }
 
   .main-shield {
-    width: 30px;
-    height: 30px;
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
   }
 
   .project-title {
