@@ -3,7 +3,8 @@ import axios from 'axios';
 let csrfToken: string | null = null;
 let accessToken: string | null = localStorage.getItem('proctora_access_token');
 
-const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+const rawApiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+const apiBase = rawApiBase.replace(/\/+$/, '');
 
 export const api = axios.create({
   baseURL: apiBase,
@@ -66,7 +67,7 @@ api.interceptors.response.use(
     ) {
       originalRequest._retry = true;
       try {
-        const refreshRes = await axios.post('/api/auth/refresh', {}, { withCredentials: true });
+        const refreshRes = await axios.post(`${apiBase}/auth/refresh`, {}, { withCredentials: true });
         const newToken = refreshRes.data?.data?.accessToken;
         if (newToken) {
           setAccessToken(newToken);
