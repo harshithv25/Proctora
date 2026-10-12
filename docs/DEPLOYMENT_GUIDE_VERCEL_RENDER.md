@@ -94,7 +94,7 @@ The backend is an Express 5 + TypeScript server with Prisma ORM and WebSockets.
    * **Runtime:** `Node`
    * **Build Command:**
      ```bash
-     npm install && npx prisma generate && npm run build
+     npm install --include=dev && npx prisma generate && npm run build
      ```
    * **Pre-Deploy Command:**  
      *Leave **EMPTY / BLANK*** (Pre-deploy commands require a paid plan on Render. Your database schema is already synchronized via `npx prisma db push`).
