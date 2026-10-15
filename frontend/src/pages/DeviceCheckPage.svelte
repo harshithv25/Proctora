@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { push } from '../lib/router.svelte';
+  import { push } from '../lib/router.svelte.ts';
   import Button from '../components/ui/Button.svelte';
   import { api, getErrorMessage } from '../lib/api';
   import { appStore } from '../stores/app.store.svelte';

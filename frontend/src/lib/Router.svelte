@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { router, matchRoute, initRouter, type RoutesMap } from './router.svelte';
+  import { router, matchRoute, initRouter, type RoutesMap } from './router.svelte.ts';
 
   interface Props {
     routes: RoutesMap;

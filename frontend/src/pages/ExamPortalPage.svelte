@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { push } from '../lib/router.svelte';
+  import { push } from '../lib/router.svelte.ts';
   import Button from '../components/ui/Button.svelte';
   import MonacoEditor from '../components/ui/MonacoEditor.svelte';
   import type { SupportedLanguage } from '../lib/monaco';

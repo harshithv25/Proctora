@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { push } from '../lib/router.svelte';
+  import { push } from '../lib/router.svelte.ts';
   import Button from '../components/ui/Button.svelte';
   import { api, getErrorMessage } from '../lib/api';
   import { appStore } from '../stores/app.store.svelte';
   import { authStore } from '../stores/auth.store.svelte';
+  import * as XLSX from 'xlsx';
 
   interface Props {
     params?: { examId?: string };
@@ -229,14 +230,29 @@
     return `${mins}m ${secs}s`;
   }
 
-  async function handleExportReport(format: 'csv' | 'pdf') {
+  async function handleExportReport(format: 'csv' | 'xlsx') {
     isExporting = true;
     try {
-      const res = await api.get(`/exams/${examId}/export?format=${format}`);
+      const res = await api.get(`/exams/${examId}/export?format=csv`);
       const data = res.data?.data || [];
       
-      // Convert to downloadable CSV
-      if (format === 'csv') {
+      if (format === 'xlsx') {
+        const rows = data.map((r: any) => ({
+          'Roll Number': r.user?.rollNumber || '',
+          'Candidate Name': r.user?.name || '',
+          'Email': r.user?.email || '',
+          'Score': r.score ?? '',
+          'Max Score': r.maxScore ?? '',
+          'Submitted Via': r.submittedVia || '',
+          'Submitted At': r.submittedAt || '',
+        }));
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Exam Report');
+        XLSX.writeFile(workbook, `proctora_${examId}_report.xlsx`);
+        appStore.addToast('Excel report downloaded successfully', 'success');
+      } else {
+        // Convert to downloadable CSV
         let csvContent = 'data:text/csv;charset=utf-8,';
         csvContent += 'Roll Number,Candidate Name,Email,Score,Max Score,Submitted Via,Submitted At\n';
         for (const r of data) {
@@ -250,11 +266,9 @@
         link.click();
         link.remove();
         appStore.addToast('CSV Report downloaded successfully', 'success');
-      } else {
-        appStore.addToast('Report generated successfully', 'info');
       }
     } catch {
-      appStore.addToast('Export generated and downloaded', 'info');
+      appStore.addToast('Failed to export report', 'error');
     } finally {
       isExporting = false;
     }
@@ -276,6 +290,9 @@
     </div>
 
     <div class="header-right">
+      <Button variant="secondary" loading={isExporting} onclick={() => handleExportReport('xlsx')}>
+        Export Excel
+      </Button>
       <Button variant="secondary" loading={isExporting} onclick={() => handleExportReport('csv')}>
         Export CSV
       </Button>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { push } from '../lib/router.svelte';
+  import { push } from '../lib/router.svelte.ts';
   import Button from '../components/ui/Button.svelte';
   import Input from '../components/ui/Input.svelte';
   import { authStore } from '../stores/auth.store.svelte';

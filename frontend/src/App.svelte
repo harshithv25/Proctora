@@ -1,6 +1,6 @@
 <script lang="ts">
   import Router from './lib/Router.svelte';
-  import { replace } from './lib/router.svelte';
+  import { replace } from './lib/router.svelte.ts';
   import { onMount } from 'svelte';
   import PageLoader from './components/layout/PageLoader.svelte';
   import ToastContainer from './components/layout/ToastContainer.svelte';
