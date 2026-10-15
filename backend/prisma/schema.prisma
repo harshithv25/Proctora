@@ -30,6 +30,7 @@ model User {
   proctoringEvents ProctoringEvent[]
   focusLogs        FocusLog[]
   editorTelemetry  EditorTelemetryEvent[]
+  candidateQueries CandidateQuery[]
 }
 
 model Session {
@@ -64,6 +65,7 @@ model Exam {
   seatingPlan    SeatingAssignment[]
   responses      ExamResponse[]
   accommodations Accommodation[]
+  candidateQueries CandidateQuery[]
 
   @@index([testId])
 }
@@ -164,5 +166,25 @@ model Log {
   @@index([username])
   @@index([timestamp])
   @@map("logs")
+}
+
+model CandidateQuery {
+  id         String   @id @default(uuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query      String
+  category   String   @default("general")
+  questionId String?
+  status     String   @default("pending")
+  response   String?
+  resolvedBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@index([examId])
+  @@index([userId])
+  @@index([status])
 }
 

@@ -77,6 +77,44 @@
     activeCandidatesCount: 0,
     submittedCount: 0,
     totalFlaggedAnomalies: 0,
+    pendingQueriesCount: 0,
+    totalQueriesCount: 0,
+  });
+
+  // Candidate Queries in Live Session
+  interface CandidateQueryItem {
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    rollNumber: string;
+    seatRow: number | null;
+    seatCol: number | null;
+    questionSetId: string;
+    query: string;
+    category: string;
+    questionId: string | null;
+    status: 'pending' | 'in_review' | 'answered' | 'resolved';
+    response: string | null;
+    resolvedBy: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }
+
+  let queries = $state<CandidateQueryItem[]>([]);
+  let replyingQuery = $state<CandidateQueryItem | null>(null);
+  let replyText = $state('');
+  let isSendingReply = $state(false);
+  let queryFilter = $state<'all' | 'pending' | 'answered'>('all');
+
+  const filteredQueries = $derived(() => {
+    if (queryFilter === 'pending') {
+      return queries.filter((q) => q.status === 'pending');
+    }
+    if (queryFilter === 'answered') {
+      return queries.filter((q) => q.status === 'answered' || q.status === 'resolved' || Boolean(q.response));
+    }
+    return queries;
   });
 
   // Post-Exam Analytics Sorting (Requirement 7)
@@ -124,11 +162,43 @@
         metrics = data.metrics || metrics;
         candidates = data.candidates || [];
         alerts = data.alerts || [];
+        queries = data.queries || [];
       }
     } catch (err) {
       console.warn('Live monitor feed poll fallback:', err);
     } finally {
       isLoading = false;
+    }
+  }
+
+  function openReplyModal(q: CandidateQueryItem) {
+    replyingQuery = q;
+    replyText = q.response || '';
+  }
+
+  function closeReplyModal() {
+    replyingQuery = null;
+    replyText = '';
+  }
+
+  async function handleSendReply(status: 'answered' | 'resolved' = 'answered') {
+    if (!replyingQuery || !replyText.trim()) {
+      appStore.addToast('Please enter a response message before submitting', 'error');
+      return;
+    }
+    isSendingReply = true;
+    try {
+      await api.patch(`/exams/${examId}/queries/${replyingQuery.id}`, {
+        response: replyText.trim(),
+        status,
+      });
+      appStore.addToast(`Reply delivered to ${replyingQuery.userName}`, 'success');
+      closeReplyModal();
+      await fetchMonitorData();
+    } catch (err) {
+      appStore.addToast(getErrorMessage(err), 'error');
+    } finally {
+      isSendingReply = false;
     }
   }
 
@@ -253,6 +323,11 @@
         <span class="stat-value">{metrics.totalFlaggedAnomalies}</span>
         <span class="stat-sub">Focus blur & tab violations</span>
       </div>
+      <div class="stat-card" class:warning={metrics.pendingQueriesCount > 0}>
+        <span class="stat-label">Candidate Queries</span>
+        <span class="stat-value">{metrics.pendingQueriesCount || 0} Pending</span>
+        <span class="stat-sub">{metrics.totalQueriesCount || 0} total queries from candidates</span>
+      </div>
     </div>
 
     <!-- CANDIDATES LIVE MONITOR & PROGRESS TABLE (Requirement 4 & 5) -->
@@ -357,6 +432,134 @@
                   <td>
                     <Button variant="secondary" onclick={() => openAnswerSheet(cand.userId)}>
                       Inspect Sheet
+                    </Button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </section>
+
+    <!-- CANDIDATE IN-EXAM QUERIES SECTION -->
+    <section class="monitor-section">
+      <div class="section-header">
+        <div>
+          <div class="badge-title-row">
+            <h2 class="section-title">Candidate Live In-Exam Queries</h2>
+            {#if metrics.pendingQueriesCount > 0}
+              <span class="warning-pill-badge">{metrics.pendingQueriesCount} Unresolved</span>
+            {/if}
+          </div>
+          <p class="section-sub">
+            Real-time inquiries raised by candidates directly from their exam terminals. Reply directly to student screens.
+          </p>
+        </div>
+
+        <div class="query-filter-controls">
+          <button
+            type="button"
+            class="filter-tab"
+            class:active={queryFilter === 'all'}
+            onclick={() => { queryFilter = 'all'; }}
+          >
+            All ({queries.length})
+          </button>
+          <button
+            type="button"
+            class="filter-tab"
+            class:active={queryFilter === 'pending'}
+            onclick={() => { queryFilter = 'pending'; }}
+          >
+            Pending ({metrics.pendingQueriesCount || 0})
+          </button>
+          <button
+            type="button"
+            class="filter-tab"
+            class:active={queryFilter === 'answered'}
+            onclick={() => { queryFilter = 'answered'; }}
+          >
+            Answered
+          </button>
+          <Button variant="ghost" onclick={fetchMonitorData}>
+            Refresh Queries
+          </Button>
+        </div>
+      </div>
+
+      {#if filteredQueries().length === 0}
+        <div class="clean-audit-card">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <div class="clean-text">
+            <strong>No Inquiries in this Category</strong>
+            <span>Candidates taking this exam have not logged any unresolved queries currently.</span>
+          </div>
+        </div>
+      {:else}
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Candidate & Roll</th>
+                <th>Seat Location</th>
+                <th>Category</th>
+                <th>Query Message</th>
+                <th>Status</th>
+                <th>Admin Response</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each filteredQueries() as q}
+                <tr class:highlight={q.status === 'pending'}>
+                  <td class="cell-mono">{new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>
+                    <div class="candidate-cell">
+                      <span class="cand-name">{q.userName}</span>
+                      <span class="cand-roll">{q.rollNumber || 'No Roll'}</span>
+                    </div>
+                  </td>
+                  <td>
+                    {#if q.seatRow !== null && q.seatCol !== null}
+                      <span class="seat-tag">Row {q.seatRow}, Col {q.seatCol}</span>
+                    {:else}
+                      <span class="seat-tag unassigned">Unmapped</span>
+                    {/if}
+                    <span class="set-chip">{q.questionSetId}</span>
+                  </td>
+                  <td>
+                    <span class="cat-pill {q.category}">{q.category}</span>
+                  </td>
+                  <td class="query-text-cell">
+                    <p class="cand-query-p">{q.query}</p>
+                  </td>
+                  <td>
+                    <span class="status-badge" class:pending={q.status === 'pending'} class:submitted={q.status === 'answered' || q.status === 'resolved'}>
+                      {#if q.status === 'pending'}
+                        <span class="badge-dot pulse"></span>
+                        Pending
+                      {:else}
+                        <span class="badge-dot submitted"></span>
+                        {q.status === 'resolved' ? 'Resolved' : 'Answered'}
+                      {/if}
+                    </span>
+                  </td>
+                  <td class="response-text-cell">
+                    {#if q.response}
+                      <span class="response-snippet" title={q.response}>
+                        <strong>{q.resolvedBy || 'Admin'}:</strong> {q.response}
+                      </span>
+                    {:else}
+                      <span class="text-muted">Awaiting reply</span>
+                    {/if}
+                  </td>
+                  <td>
+                    <Button variant={q.status === 'pending' ? 'primary' : 'secondary'} onclick={() => openReplyModal(q)}>
+                      {q.response ? 'Edit Reply' : 'Respond'}
                     </Button>
                   </td>
                 </tr>
@@ -615,6 +818,95 @@
 
         <div class="sheet-modal-footer">
           <Button variant="secondary" onclick={closeAnswerSheet}>Close Sheet</Button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ADMIN QUERY REPLY MODAL -->
+  {#if replyingQuery}
+    <div class="sheet-modal-backdrop" onclick={closeReplyModal} role="presentation">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div class="sheet-modal-card reply-modal-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+        <div class="sheet-modal-header">
+          <div>
+            <h2 class="sheet-modal-title">
+              Respond to Candidate Query
+            </h2>
+            <p class="sheet-modal-sub">
+              Candidate: <strong>{replyingQuery.userName}</strong> ({replyingQuery.rollNumber}) • Seat: Row {replyingQuery.seatRow || '—'}, Col {replyingQuery.seatCol || '—'} ({replyingQuery.questionSetId})
+            </p>
+          </div>
+          <button type="button" class="close-btn" onclick={closeReplyModal}>×</button>
+        </div>
+
+        <div class="sheet-modal-body reply-modal-body">
+          <div class="query-preview-banner">
+            <div class="preview-meta">
+              <span class="preview-cat-tag {replyingQuery.category}">{replyingQuery.category}</span>
+              <span class="preview-time">Submitted at {new Date(replyingQuery.createdAt).toLocaleTimeString()}</span>
+            </div>
+            <div class="preview-text">
+              <strong>Candidate Query:</strong> "{replyingQuery.query}"
+            </div>
+          </div>
+
+          <div class="quick-responses-group">
+            <span class="quick-label">Quick Presets:</span>
+            <div class="quick-btns">
+              <button
+                type="button"
+                class="quick-reply-chip"
+                onclick={() => { replyText = 'Please re-read the problem statement carefully.'; }}
+              >
+                "Re-read problem statement"
+              </button>
+              <button
+                type="button"
+                class="quick-reply-chip"
+                onclick={() => { replyText = 'Constraints and test cases are verified correct as specified.'; }}
+              >
+                "Constraints verified"
+              </button>
+              <button
+                type="button"
+                class="quick-reply-chip"
+                onclick={() => { replyText = 'Terminal issue logged. Please refresh your browser window to reconnect safely.'; }}
+              >
+                "Refresh terminal safely"
+              </button>
+              <button
+                type="button"
+                class="quick-reply-chip"
+                onclick={() => { replyText = 'Your query has been acknowledged by invigilator. Proceed with test.'; }}
+              >
+                "Query acknowledged"
+              </button>
+            </div>
+          </div>
+
+          <div class="form-field-wrapper">
+            <label for="admin-reply-input" class="reply-field-label">Your Response to Candidate</label>
+            <textarea
+              id="admin-reply-input"
+              class="reply-textarea"
+              rows="4"
+              placeholder="Type instruction or response that will instantly appear on candidate's screen..."
+              bind:value={replyText}
+            ></textarea>
+          </div>
+
+          <div class="reply-modal-actions">
+            <Button variant="ghost" onclick={closeReplyModal}>
+              Cancel
+            </Button>
+            <Button variant="secondary" loading={isSendingReply} onclick={() => handleSendReply('resolved')}>
+              Send & Mark Resolved
+            </Button>
+            <Button variant="primary" loading={isSendingReply} onclick={() => handleSendReply('answered')}>
+              Send Response
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -1456,5 +1748,191 @@
       align-items: flex-start;
       gap: var(--space-3);
     }
+  }
+
+  /* Candidate Queries Admin Styles */
+  .warning-pill-badge {
+    background: #fef08a;
+    color: #854d0e;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 9999px;
+  }
+
+  .query-filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filter-tab {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .filter-tab:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-accent);
+  }
+  .filter-tab.active {
+    background: var(--color-bg-elevated);
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .query-text-cell {
+    max-width: 280px;
+  }
+  .cand-query-p {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    line-height: 1.4;
+    margin: 0;
+    word-break: break-word;
+  }
+
+  .response-text-cell {
+    max-width: 240px;
+    font-size: 12px;
+  }
+  .response-snippet {
+    display: block;
+    color: #10b981;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .text-muted {
+    color: var(--color-text-secondary);
+    font-style: italic;
+  }
+
+  .cat-pill {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--color-text-secondary);
+  }
+  .cat-pill.urgency {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .reply-modal-card {
+    max-width: 580px;
+  }
+  .reply-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .query-preview-banner {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .preview-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .preview-cat-tag {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.15);
+  }
+  .preview-time {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+  }
+  .preview-text {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    line-height: 1.4;
+  }
+
+  .quick-responses-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .quick-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+  .quick-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .quick-reply-chip {
+    font-size: 11px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 9999px;
+    padding: 4px 10px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .quick-reply-chip:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: var(--color-bg-elevated);
+  }
+
+  .form-field-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .reply-field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  .reply-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-bg);
+    color: var(--color-text-primary);
+    outline: none;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .reply-textarea:focus {
+    border-color: var(--color-accent);
+  }
+
+  .reply-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-3);
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-3);
   }
 </style>

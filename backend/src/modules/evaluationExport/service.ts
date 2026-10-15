@@ -198,7 +198,7 @@ export async function exportResponses(examIdentifier: string) {
 export async function getExamMonitorFeed(examIdentifier: string) {
   const exam = await ensureExamExists(examIdentifier, "admin");
 
-  const [questions, seatingAssignments, responses, focusLogs, proctorEvents, editorEvents] =
+  const [questions, seatingAssignments, responses, focusLogs, proctorEvents, editorEvents, candidateQueries] =
     await Promise.all([
       prisma.question.findMany({
         where: { examId: exam.id },
@@ -240,6 +240,15 @@ export async function getExamMonitorFeed(examIdentifier: string) {
         where: { OR: [{ examId: exam.id }, { examId: exam.testId || exam.id }] },
         orderBy: { timestamp: "desc" },
         take: 120,
+      }),
+      prisma.candidateQuery.findMany({
+        where: { examId: exam.id },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, rollNumber: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -435,6 +444,32 @@ export async function getExamMonitorFeed(examIdentifier: string) {
   const submittedCount = candidates.filter((c) => c.status === "submitted").length;
   const totalFlaggedAnomalies = alerts.filter((a) => a.flagged).length;
 
+  // Map candidate queries with seating info
+  const queries = candidateQueries.map((q) => {
+    const roll = (q.user?.rollNumber || "").toUpperCase();
+    const seat = seatingAssignments.find((s) => s.rollNumber.toUpperCase() === roll);
+    return {
+      id: q.id,
+      userId: q.userId,
+      userName: q.user?.name || "Candidate",
+      userEmail: q.user?.email || "",
+      rollNumber: q.user?.rollNumber || "No Roll",
+      seatRow: seat ? seat.seatRow + 1 : null,
+      seatCol: seat ? seat.seatCol + 1 : null,
+      questionSetId: seat?.questionSetId || "SET-A",
+      query: q.query,
+      category: q.category,
+      questionId: q.questionId,
+      status: q.status,
+      response: q.response,
+      resolvedBy: q.resolvedBy,
+      createdAt: q.createdAt.toISOString(),
+      updatedAt: q.updatedAt.toISOString(),
+    };
+  });
+
+  const pendingQueriesCount = queries.filter((q) => q.status === "pending").length;
+
   return {
     exam: {
       id: exam.id,
@@ -454,9 +489,12 @@ export async function getExamMonitorFeed(examIdentifier: string) {
       activeCandidatesCount,
       submittedCount,
       totalFlaggedAnomalies,
+      pendingQueriesCount,
+      totalQueriesCount: queries.length,
     },
     candidates,
     alerts,
+    queries,
   };
 }
 
@@ -574,4 +612,157 @@ export async function getCandidateAnswerSheet(examIdentifier: string, targetUser
       timestamp: f.timestamp.toISOString(),
     })),
   };
+}
+
+// Candidate In-Exam Query System
+export async function raiseCandidateQuery(
+  examIdentifier: string,
+  userId: string,
+  query: string,
+  category = "general",
+  questionId?: string | null
+) {
+  const exam = await ensureExamExists(examIdentifier, userId);
+
+  const candidate = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true, rollNumber: true },
+  });
+
+  const newQuery = await prisma.candidateQuery.create({
+    data: {
+      examId: exam.id,
+      userId,
+      query: query.trim(),
+      category: category || "general",
+      questionId: questionId || null,
+      status: "pending",
+    },
+    include: {
+      user: {
+        select: { id: true, name: true, email: true, rollNumber: true },
+      },
+    },
+  });
+
+  await logEvent({
+    eventType: "candidate_query_raised",
+    userId,
+    username: candidate?.name,
+    userEmail: candidate?.email,
+    details: {
+      examId: exam.id,
+      testId: exam.testId || exam.id,
+      queryId: newQuery.id,
+      category,
+      questionId,
+      query: query.trim(),
+    },
+  });
+
+  return newQuery;
+}
+
+export async function getCandidateQueries(examIdentifier: string, userId: string) {
+  const exam = await ensureExamExists(examIdentifier, userId);
+
+  return prisma.candidateQuery.findMany({
+    where: {
+      examId: exam.id,
+      userId,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function getExamQueriesForAdmin(examIdentifier: string) {
+  const exam = await ensureExamExists(examIdentifier, "admin");
+
+  const [queries, seatingAssignments] = await Promise.all([
+    prisma.candidateQuery.findMany({
+      where: { examId: exam.id },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, rollNumber: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.seatingAssignment.findMany({
+      where: { examId: exam.id },
+    }),
+  ]);
+
+  return queries.map((q) => {
+    const roll = (q.user?.rollNumber || "").toUpperCase();
+    const seat = seatingAssignments.find((s) => s.rollNumber.toUpperCase() === roll);
+    return {
+      id: q.id,
+      userId: q.userId,
+      userName: q.user?.name || "Candidate",
+      userEmail: q.user?.email || "",
+      rollNumber: q.user?.rollNumber || "No Roll",
+      seatRow: seat ? seat.seatRow + 1 : null,
+      seatCol: seat ? seat.seatCol + 1 : null,
+      questionSetId: seat?.questionSetId || "SET-A",
+      query: q.query,
+      category: q.category,
+      questionId: q.questionId,
+      status: q.status,
+      response: q.response,
+      resolvedBy: q.resolvedBy,
+      createdAt: q.createdAt.toISOString(),
+      updatedAt: q.updatedAt.toISOString(),
+    };
+  });
+}
+
+export async function respondCandidateQuery(
+  queryId: string,
+  adminUserId: string,
+  response: string,
+  status = "answered"
+) {
+  const adminUser = await prisma.user.findUnique({
+    where: { id: adminUserId },
+    select: { name: true, email: true },
+  });
+
+  const queryRecord = await prisma.candidateQuery.findUnique({
+    where: { id: queryId },
+  });
+
+  if (!queryRecord) {
+    throw new NotFoundError(`Candidate query '${queryId}' not found.`, "QUERY_NOT_FOUND");
+  }
+
+  const updated = await prisma.candidateQuery.update({
+    where: { id: queryId },
+    data: {
+      response: response.trim(),
+      status,
+      resolvedBy: adminUser?.name || "Admin",
+      updatedAt: new Date(),
+    },
+    include: {
+      user: {
+        select: { id: true, name: true, email: true, rollNumber: true },
+      },
+    },
+  });
+
+  await logEvent({
+    eventType: "candidate_query_responded",
+    userId: adminUserId,
+    username: adminUser?.name || "Admin",
+    userEmail: adminUser?.email,
+    details: {
+      queryId,
+      candidateId: updated.userId,
+      status,
+      response: response.trim(),
+    },
+  });
+
+  return updated;
 }

@@ -57,3 +57,55 @@ export async function getCandidateAnswerSheet(req: Request, res: Response, next:
     next(err);
   }
 }
+
+export async function raiseCandidateQuery(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { query, category, questionId } = req.body;
+    const result = await evalService.raiseCandidateQuery(
+      req.params.examId as string,
+      req.user!.userId,
+      query,
+      category,
+      questionId
+    );
+    res.status(201).json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getCandidateQueries(req: Request, res: Response, next: NextFunction) {
+  try {
+    const queries = await evalService.getCandidateQueries(
+      req.params.examId as string,
+      req.user!.userId
+    );
+    res.json({ data: queries });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getExamQueriesForAdmin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const queries = await evalService.getExamQueriesForAdmin(req.params.examId as string);
+    res.json({ data: queries });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function respondCandidateQuery(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { response, status } = req.body;
+    const result = await evalService.respondCandidateQuery(
+      req.params.queryId as string,
+      req.user!.userId,
+      response,
+      status
+    );
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+}

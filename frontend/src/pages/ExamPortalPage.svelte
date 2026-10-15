@@ -69,6 +69,23 @@
   let consecutiveViolations = $state(0);
   let lastViolationLoggedAt = 0;
 
+  // Candidate In-Exam Query System
+  let showQueryModal = $state(false);
+  let queryText = $state('');
+  let queryCategory = $state('clarification');
+  let queryQuestionId = $state<string | null>(null);
+  let candidateQueries = $state<any[]>([]);
+  let isSendingQuery = $state(false);
+  let queryPollTimer: ReturnType<typeof setInterval> | null = null;
+  let seenAnsweredQueryIds = $state<Set<string>>(new Set());
+
+  const answeredQueriesCount = $derived(
+    candidateQueries.filter((q) => q.status === 'answered' || q.status === 'resolved' || q.response).length
+  );
+  const pendingQueriesCount = $derived(
+    candidateQueries.filter((q) => q.status === 'pending').length
+  );
+
   const currentQuestion = $derived(questions[currentIdx] || null);
   const answeredCount = $derived(Object.values(answers).filter((a) => a && a.trim().length > 0).length);
 
@@ -95,6 +112,8 @@
     await initExamSession();
     setupListeners();
     initWebcam();
+    loadCandidateQueries();
+    queryPollTimer = setInterval(loadCandidateQueries, 4000);
   });
 
   onDestroy(() => {
@@ -103,9 +122,57 @@
     if (autosaveTimer) clearTimeout(autosaveTimer);
     if (proctorSamplingTimer) clearInterval(proctorSamplingTimer);
     if (alertBannerTimer) clearTimeout(alertBannerTimer);
+    if (queryPollTimer) clearInterval(queryPollTimer);
     if (proctorStream) proctorStream.getTracks().forEach((t) => t.stop());
     teardownListeners();
   });
+
+  async function loadCandidateQueries() {
+    try {
+      const res = await api.get(`/exams/${examId}/queries`);
+      const list = res.data?.data || [];
+      
+      // Check for freshly answered queries to alert candidate
+      for (const q of list) {
+        if ((q.status === 'answered' || q.status === 'resolved' || q.response) && !seenAnsweredQueryIds.has(q.id)) {
+          if (candidateQueries.length > 0) {
+            appStore.addToast(`Admin replied: "${q.query.slice(0, 30)}..."`, 'info');
+          }
+          seenAnsweredQueryIds.add(q.id);
+        }
+      }
+      candidateQueries = list;
+    } catch {
+      // Quiet fail on polling
+    }
+  }
+
+  async function handleSendQuery() {
+    const text = queryText.trim();
+    if (!text) {
+      appStore.addToast('Please type a query message before submitting.', 'error');
+      return;
+    }
+    isSendingQuery = true;
+    try {
+      const res = await api.post(`/exams/${examId}/queries`, {
+        query: text,
+        category: queryCategory,
+        questionId: queryQuestionId || undefined,
+      });
+      const created = res.data?.data;
+      if (created) {
+        candidateQueries = [created, ...candidateQueries];
+      }
+      queryText = '';
+      appStore.addToast('Query transmitted to Exam Admin successfully.', 'success');
+      loadCandidateQueries();
+    } catch (err) {
+      appStore.addToast(getErrorMessage(err), 'error');
+    } finally {
+      isSendingQuery = false;
+    }
+  }
 
   function startEarlyCountdown() {
     if (earlyCountdownTimer) clearInterval(earlyCountdownTimer);
@@ -588,6 +655,19 @@
       </div>
 
       <div class="header-right">
+        <Button variant="secondary" onclick={() => { showQueryModal = true; }}>
+          <span class="btn-query-label">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Ask Admin</span>
+            {#if answeredQueriesCount > 0}
+              <span class="header-query-pill answered" title="Admin response received">✓ {answeredQueriesCount}</span>
+            {:else if pendingQueriesCount > 0}
+              <span class="header-query-pill pending" title="Query pending admin response">⏳ {pendingQueriesCount}</span>
+            {/if}
+          </span>
+        </Button>
         <Button variant="primary" onclick={() => { showSubmitModal = true; }}>
           Submit Exam
         </Button>
@@ -797,8 +877,155 @@
         {/if}
       </main>
     </div>
+
+    <!-- Floating In-Exam Query Trigger -->
+    <button
+      type="button"
+      class="floating-query-btn"
+      class:has-response={answeredQueriesCount > 0}
+      onclick={() => { showQueryModal = true; }}
+      title="Raise a query to the exam admin"
+      aria-label="Raise query to exam admin"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+      <span>Raise Query</span>
+      {#if answeredQueriesCount > 0}
+        <span class="query-float-pill answered">✓ {answeredQueriesCount}</span>
+      {:else if pendingQueriesCount > 0}
+        <span class="query-float-pill pending">⏳ {pendingQueriesCount}</span>
+      {/if}
+    </button>
   {/if}
 </div>
+
+<!-- Candidate In-Exam Query Modal -->
+{#if showQueryModal}
+  <div class="modal-backdrop" onclick={() => { showQueryModal = false; }} role="presentation">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      class="modal-card query-modal-card"
+      onclick={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+    >
+      <div class="query-modal-top">
+        <div class="query-modal-title-group">
+          <div class="query-modal-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Candidate Query to Invigilator</h3>
+            <p class="modal-subtext">
+              Direct live communication with the exam proctors and administrators.
+            </p>
+          </div>
+        </div>
+        <button class="modal-close-icon" onclick={() => { showQueryModal = false; }}>✕</button>
+      </div>
+
+      <!-- Query Submission Form -->
+      <form class="query-compose-box" onsubmit={(e) => { e.preventDefault(); handleSendQuery(); }}>
+        <div class="query-inputs-grid">
+          <div class="form-field">
+            <label for="q-category" class="field-label">Category</label>
+            <select id="q-category" class="field-select" bind:value={queryCategory}>
+              <option value="clarification">Question Clarification</option>
+              <option value="technical">Technical / Code Editor Issue</option>
+              <option value="general">General Exam Query</option>
+              <option value="urgency">Urgent Proctor Alert</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label for="q-ref" class="field-label">Question Reference</label>
+            <select id="q-ref" class="field-select" bind:value={queryQuestionId}>
+              <option value={null}>General / No specific question</option>
+              {#each questions as q, idx}
+                <option value={q.id}>Q{idx + 1}: {q.content.slice(0, 30)}...</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="q-text" class="field-label">Your Query Message</label>
+          <textarea
+            id="q-text"
+            class="field-textarea"
+            rows="3"
+            placeholder="Type your query for the admin here (e.g., question clarification, ambiguity, or terminal issue)..."
+            bind:value={queryText}
+          ></textarea>
+        </div>
+
+        <div class="query-form-bottom">
+          <span class="field-hint">The admin will respond on your terminal screen in real time.</span>
+          <Button variant="primary" loading={isSendingQuery} type="submit">
+            Send Query to Admin
+          </Button>
+        </div>
+      </form>
+
+      <!-- Existing Queries List & Responses -->
+      <div class="query-history-wrapper">
+        <div class="history-bar">
+          <span class="history-heading">Query History & Admin Responses ({candidateQueries.length})</span>
+          <button class="history-sync-btn" type="button" onclick={loadCandidateQueries}>
+            ↻ Sync
+          </button>
+        </div>
+
+        {#if candidateQueries.length === 0}
+          <div class="empty-history-box">
+            <p>No queries raised yet. Type above and click Send to message the admin.</p>
+          </div>
+        {:else}
+          <div class="query-cards-scroll">
+            {#each candidateQueries as q}
+              <div class="candidate-query-card" class:resolved={q.status === 'resolved' || q.status === 'answered'}>
+                <div class="card-meta-line">
+                  <span class="cat-pill {q.category}">{q.category}</span>
+                  <span class="card-time">{new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span class="status-pill {q.status}">
+                    {q.status === 'answered' || q.response ? '✓ Admin Answered' : '⏳ Pending Admin'}
+                  </span>
+                </div>
+                <div class="cand-q-text">
+                  <strong>Query:</strong> {q.query}
+                </div>
+                {#if q.response}
+                  <div class="admin-reply-bubble">
+                    <div class="admin-reply-meta">
+                      <span class="admin-label">Admin Response ({q.resolvedBy || 'Invigilator'})</span>
+                      <span class="admin-time">{new Date(q.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <p class="admin-reply-content">{q.response}</p>
+                  </div>
+                {:else}
+                  <div class="waiting-admin-note">
+                    <span class="pulsing-dot"></span>
+                    <span>Waiting for exam admin response...</span>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <div class="query-modal-actions">
+        <Button variant="secondary" onclick={() => { showQueryModal = false; }}>
+          Close
+        </Button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- Submit Confirmation Modal -->
 {#if showSubmitModal}
@@ -1510,4 +1737,341 @@
     justify-content: flex-end;
     gap: var(--space-3);
   }
+
+  /* Candidate Query UI Styles */
+  .btn-query-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .header-query-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 9999px;
+  }
+  .header-query-pill.answered {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .header-query-pill.pending {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .floating-query-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 99;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: #0f172a;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+  }
+  .floating-query-btn:hover {
+    transform: translateY(-2px);
+    background: #1e293b;
+    box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.4);
+  }
+  .floating-query-btn.has-response {
+    background: #047857;
+    border-color: #34d399;
+  }
+
+  .query-float-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 9999px;
+  }
+  .query-float-pill.answered {
+    background: #ffffff;
+    color: #047857;
+  }
+  .query-float-pill.pending {
+    background: #fef08a;
+    color: #854d0e;
+  }
+
+  .query-modal-card {
+    max-width: 640px;
+    max-height: 85vh;
+    overflow-y: auto;
+    gap: var(--space-4);
+  }
+
+  .query-modal-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: var(--space-3);
+  }
+
+  .query-modal-title-group {
+    display: flex;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+
+  .query-modal-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius);
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .modal-subtext {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin: 2px 0 0 0;
+  }
+
+  .modal-close-icon {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    padding: 4px;
+    border-radius: 4px;
+  }
+  .modal-close-icon:hover {
+    color: var(--color-text-primary);
+  }
+
+  .query-compose-box {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+  }
+
+  .query-inputs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .field-select,
+  .field-textarea {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+    outline: none;
+    font-family: inherit;
+  }
+  .field-select:focus,
+  .field-textarea:focus {
+    border-color: var(--color-accent);
+  }
+
+  .field-textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+
+  .query-form-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .field-hint {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+  }
+
+  .query-history-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .history-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .history-heading {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  .history-sync-btn {
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 2px 8px;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+  }
+  .history-sync-btn:hover {
+    color: var(--color-text-primary);
+  }
+
+  .empty-history-box {
+    padding: var(--space-6);
+    text-align: center;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+  }
+
+  .query-cards-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-height: 240px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .candidate-query-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .candidate-query-card.resolved {
+    border-left: 3px solid #10b981;
+  }
+
+  .card-meta-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cat-pill {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--color-text-secondary);
+  }
+  .cat-pill.urgency {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .card-time {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+  }
+
+  .status-pill {
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: auto;
+    padding: 2px 6px;
+    border-radius: 9999px;
+  }
+  .status-pill.answered {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .status-pill.pending {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .cand-q-text {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    line-height: 1.4;
+  }
+
+  .admin-reply-bubble {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    margin-top: 4px;
+  }
+
+  .admin-reply-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #047857;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+
+  .admin-reply-content {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .waiting-admin-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #d97706;
+    margin-top: 2px;
+  }
+
+  .pulsing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #d97706;
+    animation: pulse 1.5s infinite;
+  }
+
+  .query-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
 </style>
+
