@@ -4,43 +4,53 @@
 :root {
   /* surfaces */
   --color-bg: #fafaf9;
+  /* kept neutral for minimalism */
   --color-bg-elevated: #ffffff;
-  --color-bg-subtle: #f5f5f4;
+  --color-bg-subtle: #FFD9DA;
+  /* light pink integration */
   --color-bg-input: #ffffff;
 
   /* borders */
-  --color-border: #e7e5e4;
-  --color-border-focus: #a8a29e;
+  --color-border: #30343F;
+  /* replaced with the lighter dark tone, lowered opacity via usage usually */
+  --color-border-focus: #EA638C;
+  /* vibrant pink for focus states */
 
   /* text */
-  --color-text-primary: #1c1917;
-  --color-text-secondary: #78716c;
-  --color-text-muted: #a8a29e;
+  --color-text-primary: #1B2021;
+  /* darkest tone */
+  --color-text-secondary: #30343F;
+  /* secondary dark tone */
+  --color-text-muted: #89023E;
+  /* deep maroon for subtle emphasis */
   --color-text-inverse: #fafaf9;
 
   /* accent — warm stone */
-  --color-accent: #292524;
-  --color-accent-hover: #1c1917;
-  --color-accent-subtle: #f5f5f4;
+  --color-accent: #89023E;
+  /* deep maroon */
+  --color-accent-hover: #EA638C;
+  /* vibrant pink */
+  --color-accent-subtle: #FFD9DA;
+  /* light pink */
 
   /* feedback */
   --color-error: #b91c1c;
-  --color-error-bg: #fef2f2;
-  --color-error-border: #fecaca;
+  --color-error-bg: #FFD9DA;
+  --color-error-border: #EA638C;
   --color-success: #15803d;
 
   /* typography */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', monospace;
 
-  /* sizes */
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-base: 0.875rem;
-  --text-lg: 1rem;
-  --text-xl: 1.125rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
+  /* sizes - increased for better readability and attractiveness */
+  --text-xs: 0.875rem;
+  --text-sm: 0.95rem;
+  --text-base: 1.05rem;
+  --text-lg: 1.2rem;
+  --text-xl: 1.35rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
 
   /* spacing */
   --space-1: 0.25rem;
@@ -78,7 +88,8 @@
 }
 
 html {
-  font-size: 16px;
+  font-size: 18px;
+  /* bumped from 16px to scale up the whole UI slightly */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -100,13 +111,13 @@ body {
 }
 
 a {
-  color: var(--color-text-primary);
+  color: var(--color-accent);
   text-decoration: none;
   transition: color var(--duration-fast) var(--ease);
 }
 
 a:hover {
-  color: var(--color-text-secondary);
+  color: var(--color-accent-hover);
 }
 
 button {
