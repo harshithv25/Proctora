@@ -1,0 +1,9 @@
+1. Harshith Vellapha (241IT033):
+-- Asked to change the coloring scheme and make the fonts a bit bigger
+-- files changed: frontend/src/app.css
+
+2. Adarsh Bellamane (241IT004):
+-- Asked to change exam query system
+
+3. Rushi Hiren Patel (241IT065):
+-- Export to excel and csv
