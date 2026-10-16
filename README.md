@@ -1,6 +1,8 @@
 # Proctora 🛡️
 ### Real-Time Online Examination System with Proctoring and Suspicious Event Detection
 
+We have added the .env files for convenience. Ideally we should not add them to git.
+
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518.0.0-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
@@ -10,9 +12,9 @@
 
 ---
 
-> **Looking for the Complete Master Setup & Operations Guide?**  
-> Read [`docs/MASTER_SETUP_AND_ARCHITECTURE_GUIDE.md`](file:///home/harshith/dev/Proctora/docs/MASTER_SETUP_AND_ARCHITECTURE_GUIDE.md) for step-by-step installation instructions, environment configs, database maintenance scripts, all 9 system workflow Mermaid diagrams, and the complete 31-endpoint API reference catalog.  
-> Read [`docs/DATABASE_SCRIPTS.md`](file:///home/harshith/dev/Proctora/docs/DATABASE_SCRIPTS.md) for specialized database maintenance, user flush, super admin provisioning, and log retention scripts.  
+> **Looking for the Complete Master Setup & Operations Guide?**
+> Read [`docs/MASTER_SETUP_AND_ARCHITECTURE_GUIDE.md`](file:///home/harshith/dev/Proctora/docs/MASTER_SETUP_AND_ARCHITECTURE_GUIDE.md) for step-by-step installation instructions, environment configs, database maintenance scripts, all 9 system workflow Mermaid diagrams, and the complete 31-endpoint API reference catalog.
+> Read [`docs/DATABASE_SCRIPTS.md`](file:///home/harshith/dev/Proctora/docs/DATABASE_SCRIPTS.md) for specialized database maintenance, user flush, super admin provisioning, and log retention scripts.
 > Read [`docs/DEPLOYMENT_GUIDE_VERCEL_RENDER.md`](file:///home/harshith/dev/Proctora/docs/DEPLOYMENT_GUIDE_VERCEL_RENDER.md) for complete cloud deployment instructions (Frontend on Vercel, Backend & AI Microservice on Render, Managed PostgreSQL).
 
 ---
@@ -31,9 +33,9 @@ The platform combines continuous automated AI proctoring, sustained temporal beh
 * **Harshith Vellapha** (241IT033)
 * **Rushi Hiren Patel** (241IT065)
 
-**Course Mentor:** Dr. Jaidhar C.D.  
-**Institution:** Department of Information Technology, National Institute of Technology Karnataka, Surathkal  
-**Project:** Software Engineering Course Project  
+**Course Mentor:** Dr. Jaidhar C.D.
+**Institution:** Department of Information Technology, National Institute of Technology Karnataka, Surathkal
+**Project:** Software Engineering Course Project
 **Specification Version:** 2.0 (Based on IEEE Std 830-1998 SRS & DFD/Structure Chart Specifications)
 
 ---
